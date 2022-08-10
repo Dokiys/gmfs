@@ -122,9 +122,15 @@ func getSelectorExprName(expr *ast.SelectorExpr) (name string) {
 }
 
 func getIdentName(ident *ast.Ident) (name string) {
-	name = ident.Name
-	if ident.Name == "int" {
+	switch ident.Name {
+	case "int":
 		name = TypInt
+	case "float64":
+		name = "double"
+	case "float32":
+		name = "float"
+	default:
+		name = ident.Name
 	}
 	return
 }
