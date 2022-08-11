@@ -1,48 +1,36 @@
 package conv
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
-	"io/ioutil"
+	"log"
+	"os"
 	"testing"
 
-	"gconv/data"
+	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 )
 
-func TestName(t *testing.T) {
-	src, _ := ioutil.ReadFile("../temp/template.go")
-	fset := token.NewFileSet()
-	astf, err := parser.ParseFile(fset, "", string(src), 0)
-	if err != nil {
-		t.Error(err)
+func TestGen(t *testing.T) {
+	if err := Gen("gconv/temp"); err != nil {
+		t.Fatal(err)
 	}
-	t.Log(astf)
-}
-
-func TestName2(t *testing.T) {
-	src, _ := ioutil.ReadFile("../temp/template2.go")
-	fset := token.NewFileSet()
-	astf, err := parser.ParseFile(fset, "", string(src), 0)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(astf)
-	t.Log(data.A{})
 }
 
 // TODO[Dokiy] 2022/8/3: 加载到pacakge中获取类型，并反射创建实例
 func TestPackage(t *testing.T) {
+	ctx := context.Background()
 	cfg := &packages.Config{
-		Mode: packages.LoadImports | packages.LoadSyntax,
-		// TODO: Need to think about constants in test files. Maybe write type_string_test.go
-		// in a separate pass? For later.
-		//Tests: false,
-		//BuildFlags: []string{fmt.Sprintf("-tags=%s", strings.Join(tags, " "))},
+		Context:    ctx,
+		Mode:       packages.NeedName | packages.NeedCompiledGoFiles | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
+		Env:        os.Environ(),
+		BuildFlags: []string{"-tags=gconv"},
 	}
-	pkgs, err := packages.Load(cfg, "go_test/my/genconv/temp")
+	pkgs, err := packages.Load(cfg, "gconv/temp")
 	if err != nil {
 		t.Error(err)
 	}
@@ -61,14 +49,50 @@ func TestPackage(t *testing.T) {
 	t.Log(defs)
 }
 
-func inspect(node ast.Node) bool {
-	decl, ok := node.(*ast.GenDecl)
-	if !ok || decl.Tok != token.IMPORT {
-		return true
+func TestAstutil(t *testing.T) {
+	src := `
+package p
+
+func pred() bool {
+  return true
+}
+
+func pp(x int) int {
+  if x > 2 && pred() {
+    return 5
+  }
+
+  var b = pred()
+  if b {
+    return 6
+  }
+  return 0
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", src, 0)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	for _, spec := range decl.Specs {
-		fmt.Println(spec)
-	}
-	return false
+	astutil.Apply(file, nil, func(c *astutil.Cursor) bool {
+		n := c.Node()
+		switch x := n.(type) {
+		case *ast.CallExpr:
+			id, ok := x.Fun.(*ast.Ident)
+			if ok {
+				if id.Name == "pred" {
+					c.Replace(&ast.UnaryExpr{
+						Op: token.NOT,
+						X:  x,
+					})
+				}
+			}
+		}
+
+		return true
+	})
+
+	fmt.Println("Modified AST:")
+	printer.Fprint(os.Stdout, fset, file)
 }

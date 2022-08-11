@@ -1,7 +1,9 @@
+//go:build !gconv
+
 package temp
 
 import (
-	"go_test/my/genconv/data"
+	"gconv/data"
 )
 
 //go:generate pinfo
