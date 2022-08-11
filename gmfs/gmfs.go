@@ -14,6 +14,8 @@ import (
 const specTab = "\t"
 const specEnter = "\n"
 
+var TypInt = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
+
 func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 	src, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -68,7 +70,7 @@ func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
 	for i, field := range st.Fields.List {
 		msg += fmt.Sprintf("%s\n", genComment(cmap[field], specTab))
 		// gen field
-		msg += fmt.Sprintf("\t%s %s = %d;\n", genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1)
+		msg += fmt.Sprintf("\t%s %s = %d%s;\n", genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
 	}
 	msg += fmt.Sprintf("}")
 
@@ -120,9 +122,15 @@ func getSelectorExprName(expr *ast.SelectorExpr) (name string) {
 }
 
 func getIdentName(ident *ast.Ident) (name string) {
-	name = ident.Name
-	if ident.Name == "int" {
-		name = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
+	switch ident.Name {
+	case "int":
+		name = TypInt
+	case "float64":
+		name = "double"
+	case "float32":
+		name = "float"
+	default:
+		name = ident.Name
 	}
 	return
 }
