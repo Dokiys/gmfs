@@ -10,6 +10,7 @@ type Item struct {
 
 type Data struct {
 	Id        int
+	id2       int
 	Name      string
 	Item      []*Item
 	CreatedAt time.Time

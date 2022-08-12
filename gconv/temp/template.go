@@ -5,11 +5,13 @@ package temp
 import (
 	"fmt"
 
-	"gconv/data/dao"
-	"gconv/data/do"
+	dao1 "gconv/data/dao"
+	do1 "gconv/data/do"
 )
 
-func ConvData(daoData *dao.Data) (doData *do.Data) {
+type D struct{}
+
+func ConvData(daoData *dao1.Data) (doData *do1.Data) {
 	fmt.Printf(123)
 	daoData.Id = 1
 	panic(func() {

@@ -25,7 +25,7 @@ func load(pkgPath string) ([]*packages.Package, error) {
 	ctx := context.Background()
 	cfg := &packages.Config{
 		Context:    ctx,
-		Mode:       packages.NeedName | packages.NeedCompiledGoFiles | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
+		Mode:       packages.NeedName | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
 		Env:        os.Environ(),
 		BuildFlags: []string{"-tags=gconv"},
 	}
@@ -53,17 +53,14 @@ func gen(w io.Writer, pkg *packages.Package) {
 		//node := copyAST(syn)
 		//var decls []ast.Decl
 
-		astutil.Apply(syn, func(cursor *astutil.Cursor) bool {
-			n := cursor.Node()
-			switch x := n.(type) {
+		astutil.Apply(syn, func(c *astutil.Cursor) bool {
+			switch x := c.Node().(type) {
 			case *ast.FuncDecl:
-				// fnConv
-				fnConv, ok := genFnConv(pkg.TypesInfo, x)
+				fnConv, ok := newFnConv(pkg, x)
 				if !ok {
 					return false
 				}
-
-				fnConv.convFields(x)
+				//fnConv.genConvStmt()
 
 				// replace ConvFunc stmt
 				replaceFuncStmts(x, fnConv.genConvStmt())

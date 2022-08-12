@@ -7,12 +7,15 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"go/types"
 	"log"
 	"os"
+	"sort"
 	"testing"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 func TestGen(t *testing.T) {
@@ -95,4 +98,103 @@ func pp(x int) int {
 
 	fmt.Println("Modified AST:")
 	printer.Fprint(os.Stdout, fset, file)
+}
+
+func ExampleMap() {
+	const source = `package P
+
+var X []string
+var Y []string
+
+const p, q = 1.0, 2.0
+
+func f(offset int32) (value byte, ok bool)
+func g(rune) (uint8, bool)
+`
+
+	// Parse and type-check the package.
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "P.go", source, 0)
+	if err != nil {
+		panic(err)
+	}
+	pkg, err := new(types.Config).Check("P", fset, []*ast.File{f}, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	scope := pkg.Scope()
+
+	// Group names of package-level objects by their type.
+	var namesByType typeutil.Map // value is []string
+	for _, name := range scope.Names() {
+		T := scope.Lookup(name).Type()
+
+		names, _ := namesByType.At(T).([]string)
+		names = append(names, name)
+		namesByType.Set(T, names)
+	}
+
+	// Format, sort, and print the map entries.
+	var lines []string
+	namesByType.Iterate(func(T types.Type, names interface{}) {
+		lines = append(lines, fmt.Sprintf("%s   %s", names, T))
+	})
+	sort.Strings(lines)
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+
+	// Output:
+	// [X Y]   []string
+	// [f g]   func(offset int32) (value byte, ok bool)
+	// [p q]   untyped float
+}
+
+// Issue 16464
+func TestAlignofNaclSlice(t *testing.T) {
+	const src = `
+package main
+
+var s struct {
+	x *int
+	y []byte
+}
+`
+	ts := findStructType(t, src)
+	sizes := &types.StdSizes{WordSize: 4, MaxAlign: 8}
+	var fields []*types.Var
+	// Make a copy manually :(
+	for i := 0; i < ts.NumFields(); i++ {
+		fields = append(fields, ts.Field(i))
+	}
+	offsets := sizes.Offsetsof(fields)
+	if offsets[0] != 0 || offsets[1] != 4 {
+		t.Errorf("OffsetsOf(%v) = %v want %v", ts, offsets, []int{0, 4})
+	}
+}
+
+// findStructType typechecks src and returns the first struct type encountered.
+func findStructType(t *testing.T, src string) *types.Struct {
+	return findStructTypeConfig(t, src, &types.Config{})
+}
+
+func findStructTypeConfig(t *testing.T, src string, conf *types.Config) *types.Struct {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "x.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := types.Info{Types: make(map[ast.Expr]types.TypeAndValue)}
+	_, err = conf.Check("x", fset, []*ast.File{f}, &info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tv := range info.Types {
+		if ts, ok := tv.Type.(*types.Struct); ok {
+			return ts
+		}
+	}
+	t.Fatalf("failed to find a struct type in src:\n%s\n", src)
+	return nil
 }
