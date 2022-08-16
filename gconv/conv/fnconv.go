@@ -1,11 +1,11 @@
 package conv
 
 import (
-	"fmt"
 	"go/ast"
+	"go/token"
 	"go/types"
-	"strings"
 
+	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -44,12 +44,13 @@ func (i ignoreMap) exist(name string) bool {
 
 // TODO[Dokiy] 2022/8/12: notePosition reference wire[https://github.com/google/wire/blob/d07cde0df9c5edd46e05e21d29eb315e0b452cbc/internal/wire/errors.go#L60]
 type fnConv struct {
-	pkg      *packages.Package
-	fd       *ast.FuncDecl
-	param    *ast.Field
-	result   *ast.Field
-	ignore   ignoreMap
-	convStmt []ast.Stmt
+	pkg       *packages.Package
+	fd        *ast.FuncDecl
+	param     *ast.Field
+	result    *ast.Field
+	ignore    ignoreMap
+	convStmt  []ast.Stmt
+	panicStmt []ast.Stmt
 }
 
 // newFnConv
@@ -58,7 +59,9 @@ func newFnConv(pkg *packages.Package, fd *ast.FuncDecl) (*fnConv, bool) {
 	if fd.Recv != nil {
 		return nil, false
 	}
-	if len(fd.Type.Params.List) != 1 || len(fd.Type.Results.List) != 1 {
+	// Make sure one param which name is not '_' and one result
+	if len(fd.Type.Params.List) <= 0 || fd.Type.Params.List[0].Names[0].Name == "_" || len(fd.Type.Results.List) != 1 {
+		// NOTE[Dokiy] 2022/8/16: notePosition
 		return nil, false
 	}
 
@@ -80,7 +83,8 @@ func (f *fnConv) resultName() string {
 	ast.Inspect(f.result, func(node ast.Node) bool {
 		ident, ok := node.(*ast.Ident)
 		if ok {
-			name = strings.ToLower(ident.Name)
+			name = "gconv" + ident.Name
+			f.result.Names = []*ast.Ident{ast.NewIdent(name)}
 		}
 		return true
 	})
@@ -88,13 +92,80 @@ func (f *fnConv) resultName() string {
 	return name
 }
 
-func (f *fnConv) genConvStmt() []ast.Stmt {
-	f.loadPanicStmt()
-	f.convFields()
-	return f.stmt()
+func (f *fnConv) paramName() string {
+	if f.param.Names != nil {
+		return f.param.Names[0].Name
+	}
+
+	var name string
+	ast.Inspect(f.param, func(node ast.Node) bool {
+		ident, ok := node.(*ast.Ident)
+		if ok {
+			name = "gconv" + ident.Name
+			f.result.Names = []*ast.Ident{ast.NewIdent(name)}
+		}
+		return true
+	})
+
+	return name
 }
 
-// loadStmt load last panic function stmt.
+func (f *fnConv) loadResultName() {
+	if f.result.Names == nil {
+		ast.Inspect(f.result, func(node ast.Node) bool {
+			ident, ok := node.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			f.result.Names = []*ast.Ident{ast.NewIdent("gconv" + ident.Name)}
+			return false
+		})
+	}
+}
+
+func (f *fnConv) replaceFunc() {
+	// Make sure result name exist
+	f.loadResultName()
+	f.loadPanicStmt()
+
+	// Conv fields
+	rTpy := f.pkg.TypesInfo.TypeOf(f.result.Type)
+	pTpy := f.pkg.TypesInfo.TypeOf(f.param.Type)
+	pMap, rFields := getFieldsMap(pTpy, emptyIgnoreMap), getFields(rTpy, f.ignore)
+
+	// TODO[Dokiy] 2022/8/16: 2. 如果是数组或者切片，添加外部for语句, 注意assign名称
+	// for i = 0; i<len(paramName); i ++ {}
+	var stmt []ast.Stmt
+	for _, rf := range rFields {
+		pf, ok := pMap[rf.Name()]
+		if !ok {
+			continue
+		}
+		if varStmt, ok := genVarConv(rf, pf, f.resultName(), f.paramName()); ok {
+			stmt = append(stmt, varStmt...)
+		}
+	}
+	f.convStmt = stmt
+
+	// Replace func content
+	astutil.Apply(f.fd, func(c *astutil.Cursor) bool {
+		switch c.Node().(type) {
+		case *ast.BlockStmt:
+			c.Replace(&ast.BlockStmt{
+				Lbrace: token.NoPos,
+				List:   f.content(),
+				Rbrace: token.NoPos,
+			})
+
+			return false
+		}
+
+		return true
+	}, nil)
+	return
+}
+
+// loadStmt load last panic content.
 func (f *fnConv) loadPanicStmt() {
 	var stmts []ast.Stmt
 	for i, stmt := range f.fd.Body.List {
@@ -126,30 +197,15 @@ func (f *fnConv) loadPanicStmt() {
 		}
 	}
 
-	f.convStmt = stmts
+	f.panicStmt = stmts
 	f.ignore.pickField(stmts, f.resultName())
 	return
 }
 
-func (f *fnConv) convFields() {
-	rt := f.pkg.TypesInfo.TypeOf(f.result.Type)
-	pt := f.pkg.TypesInfo.TypeOf(f.param.Type)
-	pVar, rVar := getFields(pt, emptyIgnoreMap), getFields(rt, f.ignore)
-
-	// TODO[Dokiy] 2022/8/12: 比较field, 生成 ast.stmt
-	// NOTE[Dokiy] 2022/8/12: 处理dao.Item
-	// NOTE[Dokiy] 2022/8/12: 处理[]*dao.Item
-	fmt.Println(pVar, rVar)
-}
-
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
-	for tpy.Underlying() != tpy {
-		tpy = tpy.Underlying()
-	}
-
 	var fields []*types.Var
 	for {
-		switch x := tpy.(type) {
+		switch x := underPointerTpy(tpy).(type) {
 		case *types.Struct:
 			for i := 0; i < x.NumFields(); i++ {
 				field := x.Field(i)
@@ -158,16 +214,15 @@ func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 					continue
 				}
 
+				//fields[field.Name()] = field
 				fields = append(fields, field)
 			}
 			return fields
-		// TODO[Dokiy] 2022/8/12:
-		//case *types.Slice:
-		//tpy = x.Elem().Underlying()
-		//continue
+		case *types.Slice:
+			tpy = x.Elem()
 
-		case *types.Pointer:
-			tpy = x.Elem().Underlying()
+		case *types.Array:
+			tpy = x.Elem()
 
 		default:
 			// TODO[Dokiy] 2022/8/12: notePosition
@@ -176,7 +231,35 @@ func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 	}
 }
 
-func (f *fnConv) stmt() []ast.Stmt {
-	//return f.convStmt
-	return f.convStmt
+func getFieldsMap(tpy types.Type, ignore ignoreMap) map[string]*types.Var {
+	var fields = make(map[string]*types.Var)
+	for {
+		switch x := underPointerTpy(tpy).(type) {
+		case *types.Struct:
+			for i := 0; i < x.NumFields(); i++ {
+				field := x.Field(i)
+
+				if ignore.exist(field.Name()) || !field.Exported() {
+					continue
+				}
+
+				fields[field.Name()] = field
+				//fields = append(fields, field)
+			}
+			return fields
+		// TODO[Dokiy] 2022/8/12:
+		//case *types.Slice:
+		//tpy = x.Elem().Underlying()
+		//continue
+
+		default:
+			// TODO[Dokiy] 2022/8/12: notePosition
+			panic("Unsupported params")
+		}
+	}
+}
+
+func (f *fnConv) content() (stmt []ast.Stmt) {
+	stmt = append(f.convStmt, f.panicStmt...)
+	return append(stmt, &ast.ReturnStmt{})
 }

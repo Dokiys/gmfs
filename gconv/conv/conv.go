@@ -4,7 +4,6 @@ import (
 	"context"
 	"go/ast"
 	"go/printer"
-	"go/token"
 	"io"
 	"os"
 
@@ -63,7 +62,7 @@ func gen(w io.Writer, pkg *packages.Package) {
 				//fnConv.genConvStmt()
 
 				// replace ConvFunc stmt
-				replaceFuncStmts(x, fnConv.genConvStmt())
+				fnConv.replaceFunc()
 			}
 
 			return true
@@ -79,22 +78,4 @@ func gen(w io.Writer, pkg *packages.Package) {
 		//}
 
 	}
-}
-
-func replaceFuncStmts(fn *ast.FuncDecl, stmts []ast.Stmt) {
-	astutil.Apply(fn, func(c *astutil.Cursor) bool {
-		switch c.Node().(type) {
-		case *ast.BlockStmt:
-			c.Replace(&ast.BlockStmt{
-				Lbrace: token.NoPos,
-				List:   stmts,
-				Rbrace: token.NoPos,
-			})
-
-			return false
-		}
-
-		return true
-	}, nil)
-	return
 }

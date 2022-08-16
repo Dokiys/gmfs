@@ -9,9 +9,9 @@ type Item struct {
 }
 
 type Data struct {
-	Id        int
+	Id        int32
 	id2       int
 	Name      string
 	Item      []*Item
-	CreatedAt time.Time
+	CreatedAt *time.Time
 }

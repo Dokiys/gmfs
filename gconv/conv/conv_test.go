@@ -24,7 +24,6 @@ func TestGen(t *testing.T) {
 	}
 }
 
-// TODO[Dokiy] 2022/8/3: 加载到pacakge中获取类型，并反射创建实例
 func TestPackage(t *testing.T) {
 	ctx := context.Background()
 	cfg := &packages.Config{
