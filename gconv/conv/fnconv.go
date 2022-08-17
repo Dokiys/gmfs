@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
@@ -44,17 +45,25 @@ func (i ignoreMap) exist(name string) bool {
 
 // TODO[Dokiy] 2022/8/12: notePosition reference wire[https://github.com/google/wire/blob/d07cde0df9c5edd46e05e21d29eb315e0b452cbc/internal/wire/errors.go#L60]
 type fnConv struct {
-	pkg       *packages.Package
-	fd        *ast.FuncDecl
-	param     *ast.Field
-	result    *ast.Field
+	pkg *packages.Package
+	syn *ast.File
+	fd  *ast.FuncDecl
+
+	impAlias map[string]string
+	// params
+	param      *ast.Field
+	paramName  string
+	result     *ast.Field
+	resultName string
+
+	// stmt
 	ignore    ignoreMap
 	convStmt  []ast.Stmt
 	panicStmt []ast.Stmt
 }
 
 // newFnConv
-func newFnConv(pkg *packages.Package, fd *ast.FuncDecl) (*fnConv, bool) {
+func newFnConv(pkg *packages.Package, syn *ast.File, fd *ast.FuncDecl) (*fnConv, bool) {
 	// check is handle func
 	if fd.Recv != nil {
 		return nil, false
@@ -65,87 +74,102 @@ func newFnConv(pkg *packages.Package, fd *ast.FuncDecl) (*fnConv, bool) {
 		return nil, false
 	}
 
+	// Get result name
+	param, result := fd.Type.Params.List[0], fd.Type.Results.List[0]
+	if result.Names == nil {
+		ast.Inspect(result, func(node ast.Node) bool {
+			ident, ok := node.(*ast.Ident)
+			if ok {
+				// TODO[Dokiy] 2022/8/17: pkg name
+				result.Names = []*ast.Ident{ast.NewIdent("gconv" + ident.Name)}
+				return false
+			}
+			return true
+		})
+
+	}
+
+	importAlias := make(map[string]string, len(syn.Imports))
+	for _, imp := range syn.Imports {
+		if imp.Name != nil {
+			importAlias[imp.Path.Value] = imp.Name.Name
+			continue
+		}
+
+		if imp.Path.Value != pkg.PkgPath {
+			// add last name
+			index := strings.LastIndex(imp.Path.Value, "/")
+			if index < 0 {
+				index = 0
+			}
+
+			importAlias[imp.Path.Value] = imp.Path.Value[index+1:]
+		}
+	}
+
 	return &fnConv{
-		pkg:    pkg,
-		fd:     fd,
-		ignore: make(ignoreMap),
-		param:  fd.Type.Params.List[0],
-		result: fd.Type.Results.List[0],
+		pkg:        pkg,
+		fd:         fd,
+		ignore:     make(ignoreMap),
+		impAlias:   importAlias,
+		param:      param,
+		paramName:  param.Names[0].Name,
+		result:     result,
+		resultName: result.Names[0].Name,
 	}, true
 }
 
-func (f *fnConv) resultName() string {
-	if f.result.Names != nil {
-		return f.result.Names[0].Name
-	}
-
-	var name string
-	ast.Inspect(f.result, func(node ast.Node) bool {
-		ident, ok := node.(*ast.Ident)
-		if ok {
-			name = "gconv" + ident.Name
-			f.result.Names = []*ast.Ident{ast.NewIdent(name)}
-		}
-		return true
-	})
-
-	return name
+func (f *fnConv) typeOf(e ast.Expr) types.Type {
+	return f.pkg.TypesInfo.TypeOf(e)
 }
 
-func (f *fnConv) paramName() string {
-	if f.param.Names != nil {
-		return f.param.Names[0].Name
-	}
-
-	var name string
-	ast.Inspect(f.param, func(node ast.Node) bool {
-		ident, ok := node.(*ast.Ident)
-		if ok {
-			name = "gconv" + ident.Name
-			f.result.Names = []*ast.Ident{ast.NewIdent(name)}
-		}
-		return true
-	})
-
-	return name
+func (f *fnConv) typeOfResult() types.Type {
+	return f.typeOf(f.result.Type)
 }
 
-func (f *fnConv) loadResultName() {
-	if f.result.Names == nil {
-		ast.Inspect(f.result, func(node ast.Node) bool {
-			ident, ok := node.(*ast.Ident)
-			if !ok {
-				return true
-			}
-			f.result.Names = []*ast.Ident{ast.NewIdent("gconv" + ident.Name)}
-			return false
-		})
+func (f *fnConv) typeOfParam() types.Type {
+	return f.typeOf(f.param.Type)
+}
+
+func (f *fnConv) add(stmt ...ast.Stmt) {
+	for _, s := range stmt {
+		if s != nil {
+			f.convStmt = append(f.convStmt, s)
+		}
 	}
+}
+
+func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
+	// Conv fields
+	pMap, rFields := getFieldsMap(f.typeOfParam(), emptyIgnoreMap), getFields(f.typeOfResult(), f.ignore)
+
+	for _, rf := range rFields {
+		pf, ok := pMap[rf.Name()]
+		if !ok || rf.Name() != pf.Name() {
+			continue
+		}
+		stmt = append(stmt, genVarConv(rf, pf, resultName, paramName)...)
+	}
+	return stmt
 }
 
 func (f *fnConv) replaceFunc() {
-	// Make sure result name exist
-	f.loadResultName()
+	// Load panic stmt
 	f.loadPanicStmt()
 
-	// Conv fields
-	rTpy := f.pkg.TypesInfo.TypeOf(f.result.Type)
-	pTpy := f.pkg.TypesInfo.TypeOf(f.param.Type)
-	pMap, rFields := getFieldsMap(pTpy, emptyIgnoreMap), getFields(rTpy, f.ignore)
-
-	// TODO[Dokiy] 2022/8/16: 2. 如果是数组或者切片，添加外部for语句, 注意assign名称
-	// for i = 0; i<len(paramName); i ++ {}
-	var stmt []ast.Stmt
-	for _, rf := range rFields {
-		pf, ok := pMap[rf.Name()]
-		if !ok {
-			continue
-		}
-		if varStmt, ok := genVarConv(rf, pf, f.resultName(), f.paramName()); ok {
-			stmt = append(stmt, varStmt...)
-		}
+	// Add init result stmt
+	switch x := f.typeOfResult().(type) {
+	case *types.Array:
+		// TODO[Dokiy] 2022/8/16: 2. 如果是数组或者切片，添加外部for语句, 注意assign名称
+		// resultName = make(resultType, len(paramName))
+		// for i = 0; i<len(paramName); i ++ {} 传入的是f.resultName+"[i]" f.paramName+"[i]"
+		//f.convField() 添加到for循环中
+	case *types.Pointer:
+		f.add(pointerInitStmt(f.impAlias, x, f.resultName))
+		f.add(f.convField(f.resultName, f.paramName)...)
+	default:
+		f.add(f.convField(f.resultName, f.paramName)...)
 	}
-	f.convStmt = stmt
 
 	// Replace func content
 	astutil.Apply(f.fd, func(c *astutil.Cursor) bool {
@@ -198,7 +222,7 @@ func (f *fnConv) loadPanicStmt() {
 	}
 
 	f.panicStmt = stmts
-	f.ignore.pickField(stmts, f.resultName())
+	f.ignore.pickField(stmts, f.resultName)
 	return
 }
 

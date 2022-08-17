@@ -55,13 +55,10 @@ func gen(w io.Writer, pkg *packages.Package) {
 		astutil.Apply(syn, func(c *astutil.Cursor) bool {
 			switch x := c.Node().(type) {
 			case *ast.FuncDecl:
-				fnConv, ok := newFnConv(pkg, x)
+				fnConv, ok := newFnConv(pkg, syn, x)
 				if !ok {
 					return false
 				}
-				//fnConv.genConvStmt()
-
-				// replace ConvFunc stmt
 				fnConv.replaceFunc()
 			}
 

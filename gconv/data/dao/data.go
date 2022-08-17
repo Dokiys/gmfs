@@ -11,6 +11,9 @@ type Item struct {
 type Data struct {
 	Id        int
 	Name      string
-	Item      []*Item
+	Item      Item
+	Itemp     *Item
+	Items     []Item
+	Itemsp    []*Item
 	CreatedAt time.Time
 }
