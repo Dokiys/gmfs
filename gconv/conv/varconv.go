@@ -8,40 +8,64 @@ import (
 )
 
 type varConv struct {
-	lv    *types.Var
-	rv    *types.Var
-	lname string
-	rname string
+	ignore       ignoreMap
+	ignorePrefix string
 }
 
-func newVarConv(lv *types.Var, rv *types.Var, lname string, rname string) *varConv {
-	return &varConv{lv: lv, rv: rv, lname: lname, rname: rname}
+func newVarConv(ignoreMap ignoreMap, ignorePrefix string) *varConv {
+	return &varConv{ignore: ignoreMap, ignorePrefix: ignorePrefix}
 }
 
-func genVarConv(lv *types.Var, rv *types.Var, lname string, rname string) (stmt []ast.Stmt) {
+func (vc *varConv) genVarConv(lt types.Type, rt types.Type, lname string, rname string) (stmt []ast.Stmt) {
 	// TODO[Dokiy] 2022/8/12: 比较field, 生成 ast.stmt
-	// NOTE[Dokiy] 2022/8/12: 处理dao.Item
-	// NOTE[Dokiy] 2022/8/12: 处理[]*dao.Item
-	// NOTE[Dokiy] 2022/8/12: 处理[]*dao.Item 与 []dao.Item
+	//pMap, rFields := getFieldsMap(lt, emptyIgnoreMap), getFields(rt, vc.ignore)
+	//for _, rf := range rFields {
+	//	pf, ok := pMap[rf.Name()]
+	//	if !ok || rf.Name() != pf.Name() {
+	//		continue
+	//	}
+	//	// ignore = f.ignore[rf.Name()]
+	//	stmt = append(stmt, vc.genVarConv(rf, pf, resultName, paramName)...)
+	//}
+	//
+	//if as := genAssignStmt(lv, rv, lname, rname); as != nil {
+	//	return append(stmt, as)
+	//}
 
-	if as := genAssignStmt(lv, rv, lname, rname); as != nil {
-		return append(stmt, as)
+	if lt.String() == rt.String() {
+		return append(stmt, &ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(lname)},
+			Tok: token.ASSIGN,
+			Rhs: []ast.Expr{ast.NewIdent(rname)},
+		})
 	}
 
-	switch x := underPointerTpy(lv.Type()).(type) {
+	switch lx := lt.(type) {
 	// int int 【x】
 	// *dao.Item dao.Item 【x】
-	//case *types.Basic, *types.Pointer:
-	//	return append(stmt, genAssignStmt(lv, rv, lname, rname))
+	case *types.Basic:
+		//if ok := tryType(rt); !ok {
+		//	panic("err type")
+		//}
+		return append(stmt, genAssignStmt(lt, rt, lname, rname))
+
 	case *types.Struct:
+		_, ok := underPointerTpy(rt).(*types.Struct)
+		if !ok {
+			return nil
+		}
+
 		for i := 0; i < x.NumFields(); i++ {
-			//f := x.Field(i)
+			f := x.Field(i)
+			panic(f)
 		}
 	case *types.Slice, *types.Array:
-		// TODO[Dokiy] 2022/8/19: Slice for
-		//for i = 0; i < len(params); i++ {
-		//	result[i].id = params[i].id
-		//}
+	//for i = 0; i < len(params); i++ {
+	//	result[i].id = params[i].id
+	//}
+	//
+	case *types.Named:
+		//vc.genVarConv(lt, rt, lname, rname)
 
 	default:
 		return nil
@@ -50,20 +74,13 @@ func genVarConv(lv *types.Var, rv *types.Var, lname string, rname string) (stmt 
 	return nil
 }
 
-func genAssignStmt(lv *types.Var, rv *types.Var, lname string, rname string) ast.Stmt {
-	lt, rt := underPointerTpy(lv.Type()), underPointerTpy(rv.Type())
+func genAssignStmt(lt types.Type, rt types.Type, lname string, rname string) ast.Stmt {
 	// Assign the same type.
-	if lt == rt {
+	if lt.String() == rt.String() {
 		return &ast.AssignStmt{
-			Lhs: []ast.Expr{&ast.SelectorExpr{
-				X:   ast.NewIdent(lname),
-				Sel: ast.NewIdent(lv.Name()),
-			}},
+			Lhs: []ast.Expr{ast.NewIdent(lname)},
 			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{&ast.SelectorExpr{
-				X:   ast.NewIdent(rname),
-				Sel: ast.NewIdent(rv.Name()),
-			}},
+			Rhs: []ast.Expr{ast.NewIdent(rname)},
 		}
 	}
 
@@ -71,15 +88,9 @@ func genAssignStmt(lv *types.Var, rv *types.Var, lname string, rname string) ast
 	if i, ok := lt.(*types.Basic); ok && i.Info() == types.IsInteger {
 		rname = fmt.Sprintf("(%s)%s", i.Name(), rname)
 		return &ast.AssignStmt{
-			Lhs: []ast.Expr{&ast.SelectorExpr{
-				X:   ast.NewIdent(lname),
-				Sel: ast.NewIdent(lv.Name()),
-			}},
+			Lhs: []ast.Expr{ast.NewIdent(lname)},
 			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{&ast.SelectorExpr{
-				X:   ast.NewIdent(rname),
-				Sel: ast.NewIdent(rv.Name()),
-			}},
+			Rhs: []ast.Expr{ast.NewIdent(rname)},
 		}
 	}
 

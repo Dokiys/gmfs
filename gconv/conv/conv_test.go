@@ -22,6 +22,7 @@ func TestGen(t *testing.T) {
 	if err := Gen("gconv/temp"); err != nil {
 		t.Fatal(err)
 	}
+
 }
 
 func TestPackage(t *testing.T) {

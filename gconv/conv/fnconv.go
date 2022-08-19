@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
@@ -19,18 +20,22 @@ func (i ignoreMap) pickField(stmts []ast.Stmt, xname string) {
 		switch x := stmt.(type) {
 		case *ast.AssignStmt:
 			for _, lh := range x.Lhs {
-				// check is result assigned
-				se, ok := lh.(*ast.SelectorExpr)
-				if !ok {
+				// TODO[Dokiy] 2022/8/19: ignoreTree?
+				// TODO[Dokiy] 2022/8/19: ast.inspect
+				var names []string
+				ast.Inspect(lh, func(node ast.Node) bool {
+					ident, ok := node.(*ast.Ident)
+					if ok {
+						names = append(names, ident.Name)
+					}
+					return true
+				})
+
+				if len(names) <= 0 || names[0] != xname {
 					continue
 				}
 
-				ident, ok := se.X.(*ast.Ident)
-				if ident.Name != xname {
-					continue
-				}
-
-				i[se.Sel.Name] = struct{}{}
+				i[strings.Join(names, ".")] = struct{}{}
 			}
 
 		default:
@@ -199,16 +204,10 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 
 func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
 	// Conv fields
-	pMap, rFields := getFieldsMap(f.typeOfParam(), emptyIgnoreMap), getFields(f.typeOfResult(), f.ignore)
-
-	for _, rf := range rFields {
-		pf, ok := pMap[rf.Name()]
-		if !ok || rf.Name() != pf.Name() {
-			continue
-		}
-		stmt = append(stmt, genVarConv(rf, pf, resultName, paramName)...)
-	}
-	return stmt
+	//a := f.typeOfParam()
+	//panic(a)
+	vc := newVarConv(f.ignore, f.resultName)
+	return vc.genVarConv(f.typeOfResult(), f.typeOfParam(), resultName, paramName)
 }
 
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
@@ -222,11 +221,11 @@ func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 				if ignore.exist(field.Name()) || !field.Exported() {
 					continue
 				}
-
-				//fields[field.Name()] = field
 				fields = append(fields, field)
 			}
+
 			return fields
+
 		case *types.Slice:
 			tpy = x.Elem()
 
@@ -237,7 +236,6 @@ func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 			return fields
 
 		default:
-			// TODO[Dokiy] 2022/8/12: notePosition
 			panic("Unsupported params")
 		}
 	}
@@ -254,18 +252,21 @@ func getFieldsMap(tpy types.Type, ignore ignoreMap) map[string]*types.Var {
 				if ignore.exist(field.Name()) || !field.Exported() {
 					continue
 				}
-
 				fields[field.Name()] = field
-				//fields = append(fields, field)
 			}
+
 			return fields
-		// TODO[Dokiy] 2022/8/12:
-		//case *types.Slice:
-		//tpy = x.Elem().Underlying()
-		//continue
+
+		case *types.Slice:
+			tpy = x.Elem()
+
+		case *types.Array:
+			tpy = x.Elem()
+
+		case *types.Basic:
+			return fields
 
 		default:
-			// TODO[Dokiy] 2022/8/12: notePosition
 			panic("Unsupported params")
 		}
 	}
