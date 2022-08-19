@@ -1,6 +1,7 @@
 package conv
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -89,22 +90,22 @@ func newFnConv(pkg *packages.Package, syn *ast.File, fd *ast.FuncDecl) (*fnConv,
 
 	}
 
-	importAlias := make(map[string]string, len(syn.Imports))
+	importAlias := make(map[string]string, len(syn.Imports)+1)
 	for _, imp := range syn.Imports {
+		alias := strings.Trim(imp.Path.Value, "\"")
+		// Named import
 		if imp.Name != nil {
-			importAlias[imp.Path.Value] = imp.Name.Name
+			importAlias[alias] = strings.Trim(imp.Name.Name, "\"")
 			continue
 		}
 
-		if imp.Path.Value != pkg.PkgPath {
-			// add last name
-			index := strings.LastIndex(imp.Path.Value, "/")
-			if index < 0 {
-				index = 0
-			}
-
-			importAlias[imp.Path.Value] = imp.Path.Value[index+1:]
+		// Add last name
+		index := strings.LastIndex(imp.Path.Value, "/")
+		if index < 0 {
+			index = 0
 		}
+
+		importAlias[alias] = strings.Trim(imp.Path.Value[index+1:], "\"")
 	}
 
 	return &fnConv{
@@ -153,23 +154,17 @@ func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
 	return stmt
 }
 
-func (f *fnConv) replaceFunc() {
+func (f *fnConv) replace() {
 	// Load panic stmt
 	f.loadPanicStmt()
 
 	// Add init result stmt
-	switch x := f.typeOfResult().(type) {
-	case *types.Array:
-		// TODO[Dokiy] 2022/8/16: 2. 如果是数组或者切片，添加外部for语句, 注意assign名称
-		// resultName = make(resultType, len(paramName))
-		// for i = 0; i<len(paramName); i ++ {} 传入的是f.resultName+"[i]" f.paramName+"[i]"
-		//f.convField() 添加到for循环中
-	case *types.Pointer:
-		f.add(pointerInitStmt(f.impAlias, x, f.resultName))
-		f.add(f.convField(f.resultName, f.paramName)...)
-	default:
-		f.add(f.convField(f.resultName, f.paramName)...)
-	}
+	f.add(f.resultInitStmt())
+	f.add(f.convField(f.resultName, f.paramName)...)
+	// TODO[Dokiy] 2022/8/19: Slice for
+	//for i = 0; i < len(params); i++ {
+	//	result[i].id = params[i].id
+	//}
 
 	// Replace func content
 	astutil.Apply(f.fd, func(c *astutil.Cursor) bool {
@@ -187,6 +182,15 @@ func (f *fnConv) replaceFunc() {
 		return true
 	}, nil)
 	return
+}
+
+func (f *fnConv) resultInitStmt() ast.Stmt {
+	vi := newVarIniter(f.impAlias, f.typeOfResult(), setSliceLen(fmt.Sprintf("len(%s)", f.paramName)))
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{ast.NewIdent(f.resultName)},
+		Tok: token.ASSIGN,
+		Rhs: []ast.Expr{ast.NewIdent(vi.initIdent())},
+	}
 }
 
 // loadStmt load last panic content.
@@ -226,6 +230,11 @@ func (f *fnConv) loadPanicStmt() {
 	return
 }
 
+func (f *fnConv) content() (stmt []ast.Stmt) {
+	stmt = append(f.convStmt, f.panicStmt...)
+	return append(stmt, &ast.ReturnStmt{})
+}
+
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 	var fields []*types.Var
 	for {
@@ -247,6 +256,9 @@ func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 
 		case *types.Array:
 			tpy = x.Elem()
+
+		case *types.Basic:
+			return fields
 
 		default:
 			// TODO[Dokiy] 2022/8/12: notePosition
@@ -281,9 +293,4 @@ func getFieldsMap(tpy types.Type, ignore ignoreMap) map[string]*types.Var {
 			panic("Unsupported params")
 		}
 	}
-}
-
-func (f *fnConv) content() (stmt []ast.Stmt) {
-	stmt = append(f.convStmt, f.panicStmt...)
-	return append(stmt, &ast.ReturnStmt{})
 }

@@ -11,7 +11,9 @@ import (
 
 type D struct{}
 
-func ConvData(daoData *dao1.Data) (doData *do.Data) {
+type Str string
+
+func ConvData(daoData *dao1.Data) (doData []*do.Data) {
 	fmt.Printf(123)
 	daoData.Id = 1
 	panic(func() {

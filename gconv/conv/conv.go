@@ -59,7 +59,7 @@ func gen(w io.Writer, pkg *packages.Package) {
 				if !ok {
 					return false
 				}
-				fnConv.replaceFunc()
+				fnConv.replace()
 			}
 
 			return true
