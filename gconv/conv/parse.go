@@ -3,7 +3,31 @@ package conv
 import (
 	"go/ast"
 	"go/types"
+	"strings"
 )
+
+// parseImportAlias find all named imports.
+func parseImportAlias(syn *ast.File) map[string]string {
+	importAlias := make(map[string]string, len(syn.Imports))
+	for _, imp := range syn.Imports {
+		alias := strings.Trim(imp.Path.Value, "\"")
+		// Named import
+		if imp.Name != nil {
+			importAlias[alias] = strings.Trim(imp.Name.Name, "\"")
+			continue
+		}
+
+		// Add last name
+		index := strings.LastIndex(imp.Path.Value, "/")
+		if index < 0 {
+			index = 0
+		}
+
+		importAlias[alias] = strings.Trim(imp.Path.Value[index+1:], "\"")
+	}
+
+	return importAlias
+}
 
 // qualifiedIdentObject finds the object for an identifier or a
 // qualified identifier, or nil if the object could not be found.

@@ -38,6 +38,10 @@ func genVarConv(lv *types.Var, rv *types.Var, lname string, rname string) (stmt 
 			//f := x.Field(i)
 		}
 	case *types.Slice, *types.Array:
+		// TODO[Dokiy] 2022/8/19: Slice for
+		//for i = 0; i < len(params); i++ {
+		//	result[i].id = params[i].id
+		//}
 
 	default:
 		return nil

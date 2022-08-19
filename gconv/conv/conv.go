@@ -20,7 +20,7 @@ import (
 //	return &conv{pkg: pkg}
 //}
 
-func load(pkgPath string) ([]*packages.Package, error) {
+func Gen(pkgPath string) error {
 	ctx := context.Background()
 	cfg := &packages.Config{
 		Context:    ctx,
@@ -28,11 +28,7 @@ func load(pkgPath string) ([]*packages.Package, error) {
 		Env:        os.Environ(),
 		BuildFlags: []string{"-tags=gconv"},
 	}
-	return packages.Load(cfg, pkgPath)
-}
-
-func Gen(pkgPath string) error {
-	pkgs, err := load(pkgPath)
+	pkgs, err := packages.Load(cfg, pkgPath)
 	if err != nil {
 		return err
 	}
@@ -55,9 +51,9 @@ func gen(w io.Writer, pkg *packages.Package) {
 		astutil.Apply(syn, func(c *astutil.Cursor) bool {
 			switch x := c.Node().(type) {
 			case *ast.FuncDecl:
-				fnConv, ok := newFnConv(pkg, syn, x)
+				fnConv, ok := newFnConv(pkg, parseImportAlias(syn), x)
 				if !ok {
-					return false
+					return true
 				}
 				fnConv.replace()
 			}

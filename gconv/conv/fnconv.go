@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
@@ -47,10 +46,9 @@ func (i ignoreMap) exist(name string) bool {
 // TODO[Dokiy] 2022/8/12: notePosition reference wire[https://github.com/google/wire/blob/d07cde0df9c5edd46e05e21d29eb315e0b452cbc/internal/wire/errors.go#L60]
 type fnConv struct {
 	pkg *packages.Package
-	syn *ast.File
 	fd  *ast.FuncDecl
 
-	impAlias map[string]string
+	impAlias map[string]string // import path -> alias name
 	// params
 	param      *ast.Field
 	paramName  string
@@ -64,7 +62,7 @@ type fnConv struct {
 }
 
 // newFnConv
-func newFnConv(pkg *packages.Package, syn *ast.File, fd *ast.FuncDecl) (*fnConv, bool) {
+func newFnConv(pkg *packages.Package, importAlias map[string]string, fd *ast.FuncDecl) (*fnConv, bool) {
 	// check is handle func
 	if fd.Recv != nil {
 		return nil, false
@@ -88,24 +86,6 @@ func newFnConv(pkg *packages.Package, syn *ast.File, fd *ast.FuncDecl) (*fnConv,
 			return true
 		})
 
-	}
-
-	importAlias := make(map[string]string, len(syn.Imports)+1)
-	for _, imp := range syn.Imports {
-		alias := strings.Trim(imp.Path.Value, "\"")
-		// Named import
-		if imp.Name != nil {
-			importAlias[alias] = strings.Trim(imp.Name.Name, "\"")
-			continue
-		}
-
-		// Add last name
-		index := strings.LastIndex(imp.Path.Value, "/")
-		if index < 0 {
-			index = 0
-		}
-
-		importAlias[alias] = strings.Trim(imp.Path.Value[index+1:], "\"")
 	}
 
 	return &fnConv{
@@ -140,18 +120,9 @@ func (f *fnConv) add(stmt ...ast.Stmt) {
 	}
 }
 
-func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
-	// Conv fields
-	pMap, rFields := getFieldsMap(f.typeOfParam(), emptyIgnoreMap), getFields(f.typeOfResult(), f.ignore)
-
-	for _, rf := range rFields {
-		pf, ok := pMap[rf.Name()]
-		if !ok || rf.Name() != pf.Name() {
-			continue
-		}
-		stmt = append(stmt, genVarConv(rf, pf, resultName, paramName)...)
-	}
-	return stmt
+func (f *fnConv) content() (stmt []ast.Stmt) {
+	stmt = append(f.convStmt, f.panicStmt...)
+	return append(stmt, &ast.ReturnStmt{})
 }
 
 func (f *fnConv) replace() {
@@ -161,10 +132,6 @@ func (f *fnConv) replace() {
 	// Add init result stmt
 	f.add(f.resultInitStmt())
 	f.add(f.convField(f.resultName, f.paramName)...)
-	// TODO[Dokiy] 2022/8/19: Slice for
-	//for i = 0; i < len(params); i++ {
-	//	result[i].id = params[i].id
-	//}
 
 	// Replace func content
 	astutil.Apply(f.fd, func(c *astutil.Cursor) bool {
@@ -182,15 +149,6 @@ func (f *fnConv) replace() {
 		return true
 	}, nil)
 	return
-}
-
-func (f *fnConv) resultInitStmt() ast.Stmt {
-	vi := newVarIniter(f.impAlias, f.typeOfResult(), setSliceLen(fmt.Sprintf("len(%s)", f.paramName)))
-	return &ast.AssignStmt{
-		Lhs: []ast.Expr{ast.NewIdent(f.resultName)},
-		Tok: token.ASSIGN,
-		Rhs: []ast.Expr{ast.NewIdent(vi.initIdent())},
-	}
 }
 
 // loadStmt load last panic content.
@@ -230,9 +188,27 @@ func (f *fnConv) loadPanicStmt() {
 	return
 }
 
-func (f *fnConv) content() (stmt []ast.Stmt) {
-	stmt = append(f.convStmt, f.panicStmt...)
-	return append(stmt, &ast.ReturnStmt{})
+func (f *fnConv) resultInitStmt() ast.Stmt {
+	vi := newVarIniter(f.impAlias, f.typeOfResult(), setSliceLen(fmt.Sprintf("len(%s)", f.paramName)))
+	return &ast.AssignStmt{
+		Lhs: []ast.Expr{ast.NewIdent(f.resultName)},
+		Tok: token.ASSIGN,
+		Rhs: []ast.Expr{ast.NewIdent(vi.initIdent())},
+	}
+}
+
+func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
+	// Conv fields
+	pMap, rFields := getFieldsMap(f.typeOfParam(), emptyIgnoreMap), getFields(f.typeOfResult(), f.ignore)
+
+	for _, rf := range rFields {
+		pf, ok := pMap[rf.Name()]
+		if !ok || rf.Name() != pf.Name() {
+			continue
+		}
+		stmt = append(stmt, genVarConv(rf, pf, resultName, paramName)...)
+	}
+	return stmt
 }
 
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
