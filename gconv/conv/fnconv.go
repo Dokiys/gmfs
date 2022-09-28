@@ -206,8 +206,8 @@ func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
 	// Conv fields
 	//a := f.typeOfParam()
 	//panic(a)
-	vc := newVarConv(f.ignore, f.resultName)
-	return vc.genVarConv(f.typeOfResult(), f.typeOfParam(), resultName, paramName)
+	tc := newTpyConvCtx(f.ignore, resultName, paramName)
+	return genTpyConv(*tc, f.typeOfResult(), f.typeOfParam())
 }
 
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {

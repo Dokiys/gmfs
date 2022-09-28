@@ -48,6 +48,7 @@ func gen(w io.Writer, pkg *packages.Package) {
 		//node := copyAST(syn)
 		//var decls []ast.Decl
 
+		// 替换需要转换到方法内容
 		astutil.Apply(syn, func(c *astutil.Cursor) bool {
 			switch x := c.Node().(type) {
 			case *ast.FuncDecl:

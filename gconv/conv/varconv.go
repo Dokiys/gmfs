@@ -7,74 +7,116 @@ import (
 	"go/types"
 )
 
-type varConv struct {
-	ignore       ignoreMap
-	ignorePrefix string
+// TODO[Dokiy] 2022/9/28: modified name
+type tpyConvCtx struct {
+	ignore ignoreMap
+	lname  string
+	rname  string
 }
 
-func newVarConv(ignoreMap ignoreMap, ignorePrefix string) *varConv {
-	return &varConv{ignore: ignoreMap, ignorePrefix: ignorePrefix}
+func newTpyConvCtx(ignoreMap ignoreMap, lname, rname string) *tpyConvCtx {
+	return &tpyConvCtx{ignore: ignoreMap, lname: lname, rname: rname}
 }
 
-func (vc *varConv) genVarConv(lt types.Type, rt types.Type, lname string, rname string) (stmt []ast.Stmt) {
-	// TODO[Dokiy] 2022/8/12: 比较field, 生成 ast.stmt
-	//pMap, rFields := getFieldsMap(lt, emptyIgnoreMap), getFields(rt, vc.ignore)
-	//for _, rf := range rFields {
-	//	pf, ok := pMap[rf.Name()]
-	//	if !ok || rf.Name() != pf.Name() {
-	//		continue
-	//	}
-	//	// ignore = f.ignore[rf.Name()]
-	//	stmt = append(stmt, vc.genVarConv(rf, pf, resultName, paramName)...)
-	//}
-	//
-	//if as := genAssignStmt(lv, rv, lname, rname); as != nil {
-	//	return append(stmt, as)
-	//}
+func (tcc *tpyConvCtx) getLname() string {
+	return tcc.lname
+}
 
+func (tcc *tpyConvCtx) getRname() string {
+	return tcc.rname
+}
+
+func (tcc *tpyConvCtx) setLname(name string) {
+	tcc.lname = name
+}
+
+func (tcc *tpyConvCtx) setRname(name string) {
+	tcc.rname = name
+}
+
+func (tcc *tpyConvCtx) isExist(name string) bool {
+	return tcc.ignore.exist(name)
+}
+
+func (tcc *tpyConvCtx) clone() tpyConvCtx {
+	return *newTpyConvCtx(tcc.ignore, tcc.getLname(), tcc.getRname())
+}
+
+func genTpyConv(ctx tpyConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 	if lt.String() == rt.String() {
 		return append(stmt, &ast.AssignStmt{
-			Lhs: []ast.Expr{ast.NewIdent(lname)},
+			Lhs: []ast.Expr{ast.NewIdent(ctx.getLname())},
 			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{ast.NewIdent(rname)},
+			Rhs: []ast.Expr{ast.NewIdent(ctx.getRname())},
 		})
 	}
 
-	switch lx := lt.(type) {
-	// int int 【x】
-	// *dao.Item dao.Item 【x】
+	switch x := lt.(type) {
 	case *types.Basic:
-		//if ok := tryType(rt); !ok {
-		//	panic("err type")
-		//}
-		return append(stmt, genAssignStmt(lt, rt, lname, rname))
+		y, ok := rt.(*types.Basic)
+		if !ok {
+			return nil
+		}
+		return append(stmt, genAssignStmt(x, y, ctx.getLname(), ctx.getRname()))
 
 	case *types.Struct:
-		_, ok := underPointerTpy(rt).(*types.Struct)
+		y, ok := rt.(*types.Struct)
 		if !ok {
 			return nil
 		}
 
-		for i := 0; i < x.NumFields(); i++ {
-			f := x.Field(i)
-			panic(f)
+		yMap := make(map[string]*types.Var)
+		for i := 0; i < y.NumFields(); i++ {
+			yMap[y.Field(i).Name()] = y.Field(i)
 		}
+
+		stmts := make([]ast.Stmt, 0, x.NumFields())
+		for i := 0; i < x.NumFields(); i++ {
+			xf := x.Field(i)
+
+			yf, ok := yMap[xf.Name()]
+			if !ok {
+				// NOTE[Dokiy] 2022/9/28: 记录未处理到字段，统一打印提示
+				continue
+			}
+
+			newCtx := ctx.clone()
+			newCtx.setLname(newCtx.getLname() + "." + xf.Name())
+			newCtx.setRname(newCtx.getRname() + "." + yf.Name())
+			// Ignore filed
+			if newCtx.isExist(newCtx.getLname()) {
+				continue
+			}
+
+			stmts = append(stmts, genTpyConv(newCtx, xf.Type(), yf.Type())...)
+		}
+		return stmts
+
 	case *types.Slice, *types.Array:
+		// TODO[Dokiy] 2022/9/28: to be continued!
+		return nil
 	//for i = 0; i < len(params); i++ {
 	//	result[i].id = params[i].id
 	//}
 	//
 	case *types.Named:
-		//vc.genVarConv(lt, rt, lname, rname)
+		if y, ok := rt.(*types.Named); ok {
+			return genTpyConv(ctx, x.Underlying(), y.Underlying())
+		}
+		return genTpyConv(ctx, x.Underlying(), rt)
+
+	case *types.Pointer:
+		if y, ok := rt.(*types.Pointer); ok {
+			return genTpyConv(ctx, x.Elem(), y.Elem())
+		}
+		return genTpyConv(ctx, x.Elem(), rt)
 
 	default:
-		return nil
 	}
-
-	return nil
+	panic("Unsupported type")
 }
 
-func genAssignStmt(lt types.Type, rt types.Type, lname string, rname string) ast.Stmt {
+func genAssignStmt(lt *types.Basic, rt *types.Basic, lname string, rname string) ast.Stmt {
 	// Assign the same type.
 	if lt.String() == rt.String() {
 		return &ast.AssignStmt{
@@ -85,8 +127,8 @@ func genAssignStmt(lt types.Type, rt types.Type, lname string, rname string) ast
 	}
 
 	// Assign different integer type, but can be converted
-	if i, ok := lt.(*types.Basic); ok && i.Info() == types.IsInteger {
-		rname = fmt.Sprintf("(%s)%s", i.Name(), rname)
+	if lt.Info() == types.IsInteger {
+		rname = fmt.Sprintf("(%s)%s", lt.Name(), rname)
 		return &ast.AssignStmt{
 			Lhs: []ast.Expr{ast.NewIdent(lname)},
 			Tok: token.ASSIGN,
@@ -94,11 +136,11 @@ func genAssignStmt(lt types.Type, rt types.Type, lname string, rname string) ast
 		}
 	}
 
-	return nil
+	panic("")
 }
 
 /*
-	Var init stmt
+Var init stmt
 */
 type varInitStmtOpt func(vs *varIniter)
 
