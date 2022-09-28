@@ -61,7 +61,7 @@ type fnConv struct {
 	resultName string
 
 	// stmt
-	ignore    ignoreMap
+	Ignore    ignoreMap
 	convStmt  []ast.Stmt
 	panicStmt []ast.Stmt
 }
@@ -96,7 +96,7 @@ func newFnConv(pkg *packages.Package, importAlias map[string]string, fd *ast.Fun
 	return &fnConv{
 		pkg:        pkg,
 		fd:         fd,
-		ignore:     make(ignoreMap),
+		Ignore:     make(ignoreMap),
 		impAlias:   importAlias,
 		param:      param,
 		paramName:  param.Names[0].Name,
@@ -189,7 +189,7 @@ func (f *fnConv) loadPanicStmt() {
 	}
 
 	f.panicStmt = stmts
-	f.ignore.pickField(stmts, f.resultName)
+	f.Ignore.pickField(stmts, f.resultName)
 	return
 }
 
@@ -206,8 +206,8 @@ func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
 	// Conv fields
 	//a := f.typeOfParam()
 	//panic(a)
-	tc := newTpyConvCtx(f.ignore, resultName, paramName)
-	return genTpyConv(*tc, f.typeOfResult(), f.typeOfParam())
+	tc := NewTpyConvCtx(f.Ignore, resultName, paramName)
+	return GenTpyConv(tc, f.typeOfResult(), f.typeOfParam())
 }
 
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
