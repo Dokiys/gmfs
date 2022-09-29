@@ -48,8 +48,6 @@ func main() {
 			errExit(err)
 		}
 	}
-
-	return
 }
 
 func errExit(err error) {

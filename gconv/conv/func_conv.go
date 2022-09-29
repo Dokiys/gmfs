@@ -202,11 +202,8 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 	}
 }
 
-func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
-	// Conv fields
-	//a := f.typeOfParam()
-	//panic(a)
-	tc := NewTpyConvCtx(f.Ignore, resultName, paramName)
+func (f *fnConv) convField(resultName, paramName string) []ast.Stmt {
+	tc := NewTpyCtx(f.Ignore, resultName, paramName)
 	return GenTpyConv(tc, f.typeOfResult(), f.typeOfParam())
 }
 

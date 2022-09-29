@@ -2,8 +2,29 @@ package conv
 
 import (
 	"fmt"
+	"go/ast"
+	"go/token"
 	"go/types"
 )
+
+func initVar(obj types.Object, name string) []ast.Stmt {
+	typ := obj.Type()
+	for {
+		switch xx := typ.(type) {
+		case *types.Pointer:
+			typ = xx.Elem()
+			continue
+		case *types.Named:
+			return []ast.Stmt{&ast.AssignStmt{
+				Lhs: []ast.Expr{ast.NewIdent(name)},
+				Tok: token.ASSIGN,
+				Rhs: []ast.Expr{ast.NewIdent("&" + xx.Obj().Name() + "{}")},
+			}}
+		default:
+			return nil
+		}
+	}
+}
 
 /*
 Var init stmt

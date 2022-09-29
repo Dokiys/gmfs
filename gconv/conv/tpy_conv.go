@@ -7,17 +7,17 @@ import (
 	"go/types"
 )
 
-type TypConvCtx struct {
+type typCtx struct {
 	Ignore ignoreMap
 	LIdent string
 	RIdent string
 }
 
-func NewTpyConvCtx(ignoreMap ignoreMap, lname, rname string) *TypConvCtx {
-	return &TypConvCtx{Ignore: ignoreMap, LIdent: lname, RIdent: rname}
+func NewTpyCtx(ignoreMap ignoreMap, lname, rname string) *typCtx {
+	return &typCtx{Ignore: ignoreMap, LIdent: lname, RIdent: rname}
 }
 
-func (tcc *TypConvCtx) Merge(tpyCtx *TypConvCtx) *TypConvCtx {
+func (tcc *typCtx) merge(tpyCtx *typCtx) *typCtx {
 	if tpyCtx == nil {
 		return tcc
 	}
@@ -33,17 +33,13 @@ func (tcc *TypConvCtx) Merge(tpyCtx *TypConvCtx) *TypConvCtx {
 	return tcc
 }
 
-func (tcc *TypConvCtx) IsExist(name string) bool {
+func (tcc *typCtx) isExist(name string) bool {
 	return tcc.Ignore.exist(name)
 }
 
-func GenTpyConv(tpyCtx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
-	if lt.String() == rt.String() {
-		return append(stmt, &ast.AssignStmt{
-			Lhs: []ast.Expr{ast.NewIdent(tpyCtx.LIdent)},
-			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{ast.NewIdent(tpyCtx.RIdent)},
-		})
+func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
+	if ctx == nil {
+		ctx = &typCtx{}
 	}
 
 	switch x := lt.(type) {
@@ -52,7 +48,7 @@ func GenTpyConv(tpyCtx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.St
 		if !ok {
 			return nil
 		}
-		return append(stmt, genAssignStmt(x, y, tpyCtx.LIdent, tpyCtx.RIdent))
+		return append(stmt, assignStmt(x, y, ctx.LIdent, ctx.RIdent))
 
 	case *types.Struct:
 		y, ok := rt.(*types.Struct)
@@ -67,23 +63,34 @@ func GenTpyConv(tpyCtx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.St
 
 		stmts := make([]ast.Stmt, 0, x.NumFields())
 		for i := 0; i < x.NumFields(); i++ {
-			xf := x.Field(i)
+			var xf, yf *types.Var
 
-			yf, ok := yMap[xf.Name()]
-			if !ok {
+			xf = x.Field(i)
+			if yf, ok = yMap[xf.Name()]; !ok {
 				// NOTE[Dokiy] 2022/9/28: 记录未处理到字段，统一打印提示
 				continue
 			}
 
-			var newCtx = (&TypConvCtx{LIdent: xf.Name(), RIdent: yf.Name()}).Merge(tpyCtx)
+			var newCtx = (&typCtx{LIdent: xf.Name(), RIdent: yf.Name()}).merge(ctx)
 			// Ignore filed
-			if newCtx.IsExist(newCtx.LIdent) {
+			if newCtx.isExist(newCtx.LIdent) {
 				continue
 			}
 
+			// init pointer field
+			switch xf.Type().(type) {
+			case *types.Pointer:
+				stmts = append(stmts, initVar(xf, newCtx.LIdent)...)
+			}
 			stmts = append(stmts, GenTpyConv(newCtx, xf.Type(), yf.Type())...)
 		}
 		return stmts
+
+	case *types.Named:
+		return GenTpyConv(ctx, x.Underlying(), underTpy(rt))
+
+	case *types.Pointer:
+		return GenTpyConv(ctx, x.Elem(), underTpy(rt))
 
 	case *types.Slice, *types.Array:
 		// TODO[Dokiy] 2022/9/28: to be continued!
@@ -92,30 +99,17 @@ func GenTpyConv(tpyCtx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.St
 	//	result[i].id = params[i].id
 	//}
 	//
-	case *types.Named:
-		//if y, ok := rt.(*types.Pointer); ok {
-		//	return GenTpyConv(tpyCtx, x.Underlying(), y.Elem())
-		//}
-		//if y, ok := rt.(*types.Named); ok {
-		//	return GenTpyConv(tpyCtx, x.Underlying(), y.Underlying())
-		//}
-		return GenTpyConv(tpyCtx, x.Underlying(), underTpy(rt))
-
-	case *types.Pointer:
-		//if y, ok := rt.(*types.Pointer); ok {
-		//	return GenTpyConv(tpyCtx, x.Elem(), y.Elem())
-		//}
-		//if y, ok := rt.(*types.Named); ok {
-		//	return GenTpyConv(tpyCtx, x.Elem(), y.Underlying())
-		//}
-		return GenTpyConv(tpyCtx, x.Elem(), underTpy(rt))
+	case *types.Map:
+		// NOTE[Dokiy] 2022/9/29:
+		return nil
 
 	default:
 	}
+	// NOTE[Dokiy] 2022/9/29: 记录未处理到字段，统一打印提示
 	panic("Unsupported type")
 }
 
-func genAssignStmt(lt *types.Basic, rt *types.Basic, lname string, rname string) ast.Stmt {
+func assignStmt(lt *types.Basic, rt *types.Basic, lname string, rname string) ast.Stmt {
 	// Assign the same type.
 	if lt.String() == rt.String() {
 		return &ast.AssignStmt{
