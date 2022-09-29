@@ -1,26 +1,21 @@
 package conv
 
 import (
+	"bytes"
+	"context"
 	"go/ast"
+	"go/format"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-)
 
-// pkgFor parses and type checks the package specified by path and source,
-// populating info if provided.
-//
-// If source begins with "package generic_" and type parameters are enabled,
-// generic code is permitted.
-func pkgFor(path, source string, info *types.Info) (*types.Package, error) {
-	mode := modeForSource(source)
-	return pkgForMode(path, source, info, mode)
-}
+	"golang.org/x/tools/go/packages"
+)
 
 func pkgForMode(path, source string, info *types.Info, mode parser.Mode) (*types.Package, error) {
 	fset := token.NewFileSet()
@@ -32,37 +27,53 @@ func pkgForMode(path, source string, info *types.Info, mode parser.Mode) (*types
 	return conf.Check(f.Name.Name, fset, []*ast.File{f}, info)
 }
 
-// genericPkg is a prefix for packages that should be type checked with
-// generics.
-const genericPkg = "package generic_"
+func strStmts(stmts []ast.Stmt) string {
+	// Create a FileSet for node. Since the node does not come
+	// from a real source file, fset will be empty.
+	fset := token.NewFileSet()
+	var buf bytes.Buffer
 
-func modeForSource(src string) parser.Mode {
-	if !strings.HasPrefix(src, genericPkg) {
-		return 1 << 30
+	err := format.Node(&buf, fset, stmts)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return 0
+
+	return buf.String()
 }
 
 func TestGenTpyConv(t *testing.T) {
-	const root = "./testdata/tpy_conv"
-	path := filepath.Join(root, "temp")
-	src, err := os.ReadFile(filepath.Join(path, "template.go"))
-	if err != nil {
-		t.Fatalf("%s: incorrect test src: %s", path, err)
-	}
+	var (
+		t_name   = "first test"
+		t_path   = "temp"
+		t_LIdent = "doData"
+		t_RIdent = "daoData"
+	)
 
-	// TODO[Dokiy] 2022/9/28:
-	pkg, err := pkgFor("../../gconv", string(src), nil)
-	if err != nil {
-		t.Fatalf("%s: incorrect test case: %s", path, err)
-	}
+	t.Run(t_name, func(t *testing.T) {
+		gopath, err := filepath.Abs("testdata/tpy_conv/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg := &packages.Config{
+			Context: context.Background(),
+			Mode:    packages.NeedTypes | packages.NeedTypesInfo,
+			Env:     append(os.Environ(), "GOPATH="+gopath),
+		}
+		pkgs, err := packages.Load(cfg, filepath.Join(gopath, t_path))
+		if err != nil {
+			t.Fatalf("%s: incorrect test src: %s", t_path, err)
+		}
+		for _, pkg := range pkgs {
+			X := pkg.Types.Scope().Lookup(t_LIdent)
+			Y := pkg.Types.Scope().Lookup(t_RIdent)
+			if X == nil || Y == nil {
+				continue
+			}
 
-	X := pkg.Scope().Lookup("X")
-	Y := pkg.Scope().Lookup("Y")
-	if X == nil || Y == nil {
-		t.Fatalf("test must declare both X and Y")
-	}
-
-	stmt := GenTpyConv(nil, X.Type(), Y.Type())
-	t.Log(stmt)
+			stmt := GenTpyConv(nil, X.Type(), Y.Type())
+			t.Logf("\n%s", strStmts(stmt))
+			return
+		}
+		t.Fatalf("test must declare both %s and %s", t_LIdent, t_RIdent)
+	})
 }

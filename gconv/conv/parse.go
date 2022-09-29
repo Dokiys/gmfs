@@ -49,12 +49,12 @@ func qualifiedIdentObject(info *types.Info, expr ast.Expr) types.Object {
 	}
 }
 
-func underPointerTpy(tpy types.Type) types.Type {
+func underTpy(tpy types.Type) types.Type {
 	if rtp, ok := tpy.(*types.Pointer); ok {
 		tpy = rtp.Elem()
 	}
 	if tpy.Underlying() == tpy {
 		return tpy
 	}
-	return underPointerTpy(tpy.Underlying())
+	return underTpy(tpy.Underlying())
 }

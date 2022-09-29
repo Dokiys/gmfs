@@ -17,16 +17,32 @@ func NewTpyConvCtx(ignoreMap ignoreMap, lname, rname string) *TypConvCtx {
 	return &TypConvCtx{Ignore: ignoreMap, LIdent: lname, RIdent: rname}
 }
 
-func (tcc *TypConvCtx) isExist(name string) bool {
+func (tcc *TypConvCtx) Merge(tpyCtx *TypConvCtx) *TypConvCtx {
+	if tpyCtx == nil {
+		return tcc
+	}
+
+	tcc.Ignore = tpyCtx.Ignore
+	if len(tpyCtx.LIdent) > 0 {
+		tcc.LIdent = tpyCtx.LIdent + "." + tcc.LIdent
+	}
+	if len(tpyCtx.RIdent) > 0 {
+		tcc.RIdent = tpyCtx.RIdent + "." + tcc.RIdent
+	}
+
+	return tcc
+}
+
+func (tcc *TypConvCtx) IsExist(name string) bool {
 	return tcc.Ignore.exist(name)
 }
 
-func GenTpyConv(ctx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
+func GenTpyConv(tpyCtx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 	if lt.String() == rt.String() {
 		return append(stmt, &ast.AssignStmt{
-			Lhs: []ast.Expr{ast.NewIdent(ctx.LIdent)},
+			Lhs: []ast.Expr{ast.NewIdent(tpyCtx.LIdent)},
 			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{ast.NewIdent(ctx.RIdent)},
+			Rhs: []ast.Expr{ast.NewIdent(tpyCtx.RIdent)},
 		})
 	}
 
@@ -36,7 +52,7 @@ func GenTpyConv(ctx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt)
 		if !ok {
 			return nil
 		}
-		return append(stmt, genAssignStmt(x, y, ctx.LIdent, ctx.RIdent))
+		return append(stmt, genAssignStmt(x, y, tpyCtx.LIdent, tpyCtx.RIdent))
 
 	case *types.Struct:
 		y, ok := rt.(*types.Struct)
@@ -59,13 +75,9 @@ func GenTpyConv(ctx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt)
 				continue
 			}
 
-			newCtx := &TypConvCtx{
-				Ignore: ctx.Ignore,
-				LIdent: ctx.LIdent + "." + xf.Name(),
-				RIdent: ctx.RIdent + "." + yf.Name(),
-			}
+			var newCtx = (&TypConvCtx{LIdent: xf.Name(), RIdent: yf.Name()}).Merge(tpyCtx)
 			// Ignore filed
-			if newCtx.isExist(newCtx.LIdent) {
+			if newCtx.IsExist(newCtx.LIdent) {
 				continue
 			}
 
@@ -81,16 +93,22 @@ func GenTpyConv(ctx *TypConvCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt)
 	//}
 	//
 	case *types.Named:
-		if y, ok := rt.(*types.Named); ok {
-			return GenTpyConv(ctx, x.Underlying(), y.Underlying())
-		}
-		return GenTpyConv(ctx, x.Underlying(), rt)
+		//if y, ok := rt.(*types.Pointer); ok {
+		//	return GenTpyConv(tpyCtx, x.Underlying(), y.Elem())
+		//}
+		//if y, ok := rt.(*types.Named); ok {
+		//	return GenTpyConv(tpyCtx, x.Underlying(), y.Underlying())
+		//}
+		return GenTpyConv(tpyCtx, x.Underlying(), underTpy(rt))
 
 	case *types.Pointer:
-		if y, ok := rt.(*types.Pointer); ok {
-			return GenTpyConv(ctx, x.Elem(), y.Elem())
-		}
-		return GenTpyConv(ctx, x.Elem(), rt)
+		//if y, ok := rt.(*types.Pointer); ok {
+		//	return GenTpyConv(tpyCtx, x.Elem(), y.Elem())
+		//}
+		//if y, ok := rt.(*types.Named); ok {
+		//	return GenTpyConv(tpyCtx, x.Elem(), y.Underlying())
+		//}
+		return GenTpyConv(tpyCtx, x.Elem(), underTpy(rt))
 
 	default:
 	}

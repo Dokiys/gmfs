@@ -213,7 +213,7 @@ func (f *fnConv) convField(resultName, paramName string) (stmt []ast.Stmt) {
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 	var fields []*types.Var
 	for {
-		switch x := underPointerTpy(tpy).(type) {
+		switch x := underTpy(tpy).(type) {
 		case *types.Struct:
 			for i := 0; i < x.NumFields(); i++ {
 				field := x.Field(i)
@@ -244,7 +244,7 @@ func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {
 func getFieldsMap(tpy types.Type, ignore ignoreMap) map[string]*types.Var {
 	var fields = make(map[string]*types.Var)
 	for {
-		switch x := underPointerTpy(tpy).(type) {
+		switch x := underTpy(tpy).(type) {
 		case *types.Struct:
 			for i := 0; i < x.NumFields(); i++ {
 				field := x.Field(i)
