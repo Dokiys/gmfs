@@ -203,7 +203,7 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 }
 
 func (f *fnConv) convField(resultName, paramName string) []ast.Stmt {
-	tc := NewTpyCtx(f.Ignore, resultName, paramName)
+	tc := NewTpyCtx(f.impAlias, f.Ignore, resultName, paramName)
 	return GenTpyConv(tc, f.typeOfResult(), f.typeOfParam())
 }
 

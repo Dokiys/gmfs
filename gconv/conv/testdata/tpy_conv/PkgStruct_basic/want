@@ -1,0 +1,11 @@
+x.P1 = &data.Data{}
+x.P1.Data = y.P1.Data
+x.P2 = y.P2
+x.P3.Data = y.P3.Data
+x.P4.PP1.Data = y.P4.PP1.Data
+x.P4.PP2 = &data.Data{}
+x.P4.PP2.Data = y.P4.PP2.Data
+x.P5 = &Aa{}
+x.P5.PP1.Data = y.P5.PP1.Data
+x.P5.PP2 = &data.Data{}
+x.P5.PP2.Data = y.P5.PP2.Data

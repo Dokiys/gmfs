@@ -1,4 +1,4 @@
-package first
+package tpyconv
 
 type Aa struct {
 	P1 bool
@@ -24,4 +24,4 @@ type B struct {
 }
 
 var X A
-var Y B
+var Y *B

@@ -32,15 +32,22 @@ func TestGenTpyConv(t *testing.T) {
 	const X, Y = "X", "Y"
 	const wantFile = "want"
 
+	var defCtx = &typCtx{
+		LIdent: "x",
+		RIdent: "y",
+	}
+
 	tests := []struct {
 		name   string
 		typCtx *typCtx
 	}{
-		{"Basic", nil},
-		{"Nested", nil},
-		{"Nested_Y_pointer", nil},
-		{"Nested_X_pointer", nil},
-		// TODO[Dokiy] 2022/9/29: pkg.Struct
+		{"Basic", defCtx},
+		{"Nested", defCtx},
+		{"PkgStruct_basic", defCtx},
+		{"Pointer_X", defCtx},
+		{"Pointer_XY", defCtx},
+		{"Pointer_Y", defCtx},
+		// TODO[Dokiy] 2022/9/30: arr, slice
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,21 +57,25 @@ func TestGenTpyConv(t *testing.T) {
 			}
 			cfg := &packages.Config{
 				Context: context.Background(),
-				Mode:    packages.NeedTypes | packages.NeedTypesInfo,
+				Mode:    packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
 				Env:     append(os.Environ(), "GOPATH="+gopath),
 			}
+
 			pkgs, err := packages.Load(cfg, filepath.Join(gopath, tt.name))
 			if err != nil {
 				t.Fatalf("%s: incorrect test src: %s", tt.name, err)
 			}
-			for _, pkg := range pkgs {
+			for i, pkg := range pkgs {
+				// init pkg alias
+				tt.typCtx.PkgAlias = parseImportAlias(pkg.Syntax[i])
+
 				x := pkg.Types.Scope().Lookup(X)
 				y := pkg.Types.Scope().Lookup(Y)
 				if x == nil || y == nil {
 					continue
 				}
 
-				stmt := GenTpyConv(nil, x.Type(), y.Type())
+				stmt := GenTpyConv(tt.typCtx, x.Type(), y.Type())
 				got := strStmts(stmt)
 				expected, err := os.ReadFile(filepath.Join(gopath, tt.name, wantFile))
 				if err != nil {

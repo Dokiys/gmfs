@@ -1,4 +1,4 @@
-package first
+package tpyconv
 
 type A struct {
 	P1  bool
@@ -20,6 +20,61 @@ type A struct {
 	P17 uintptr
 	P18 byte
 	P19 rune
+	P20 int
+	P21 int
+	P22 int
+	P23 int
+	P24 int
+	P25 int
+	P26 int
+	P27 int
+	P28 int
+	P29 uint8
+	P30 uint16
+	P31 uint32
+	P32 uint64
+	P33 int8
+	P34 int16
+	P35 int32
+	P36 int64
+	P37 int
+	p1  bool
+	p2  uint8
+	p3  uint16
+	p4  uint32
+	p5  uint64
+	p6  int8
+	p7  int16
+	p8  int32
+	p9  int64
+	p10 float32
+	p11 float64
+	p12 complex64
+	p13 complex128
+	p14 string
+	p15 int
+	p16 uint
+	p17 uintptr
+	p18 byte
+	p19 rune
+	p20 int
+	p21 int
+	p22 int
+	p23 int
+	p24 int
+	p25 int
+	p26 int
+	p27 int
+	p28 int
+	p29 uint8
+	p30 uint16
+	p31 uint32
+	p32 uint64
+	p33 int8
+	p34 int16
+	p35 int32
+	p36 int64
+	p37 int
 }
 
 type B struct {
@@ -42,6 +97,61 @@ type B struct {
 	P17 uintptr
 	P18 byte
 	P19 rune
+	P20 uint8
+	P21 uint16
+	P22 uint32
+	P23 uint64
+	P24 int8
+	P25 int16
+	P26 int32
+	P27 int64
+	P28 int
+	P29 int
+	P30 int
+	P31 int
+	P32 int
+	P33 int
+	P34 int
+	P35 int
+	P36 int
+	P37 int
+	p1  bool
+	p2  uint8
+	p3  uint16
+	p4  uint32
+	p5  uint64
+	p6  int8
+	p7  int16
+	p8  int32
+	p9  int64
+	p10 float32
+	p11 float64
+	p12 complex64
+	p13 complex128
+	p14 string
+	p15 int
+	p16 uint
+	p17 uintptr
+	p18 byte
+	p19 rune
+	p20 int
+	p21 int
+	p22 int
+	p23 int
+	p24 int
+	p25 int
+	p26 int
+	p27 int
+	p28 int
+	p29 uint8
+	p30 uint16
+	p31 uint32
+	p32 uint64
+	p33 int8
+	p34 int16
+	p35 int32
+	p36 int64
+	p37 int
 }
 
 var X A
