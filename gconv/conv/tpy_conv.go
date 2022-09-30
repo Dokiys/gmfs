@@ -95,7 +95,9 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 				//		stmts = append(stmts, noneAssign(ctx.LIdent, token.AND.String()+ctx.RIdent))
 				//		continue
 				//	}
-				stmts = append(stmts, initVar(xVar, newCtx.PkgAlias, newCtx.LIdent)...)
+				if stmt := initVar(xVar, newCtx.PkgAlias, newCtx.LIdent); stmt != nil {
+					stmts = append(stmts, stmt)
+				}
 
 			case *types.Named:
 				// NOTE[Dokiy] 2022/9/30:
@@ -135,4 +137,27 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 	}
 	// NOTE[Dokiy] 2022/9/29: 记录未处理到字段，统一打印提示
 	panic("Unsupported type")
+}
+
+func tryInit(newCtx *typCtx, xVar, yVar *types.Var) ast.Stmt {
+	switch xVar.Type().(type) {
+	case *types.Pointer:
+		// NOTE[Dokiy] 2022/9/30:
+		// Need keep x and y isolated
+		//	if xVar.Name() == yVar.Name() && xVar.Type().String() == types.NewPointer(yVar.Type()).String() {
+		//		stmts = append(stmts, noneAssign(ctx.LIdent, token.AND.String()+ctx.RIdent))
+		//		continue
+		//	}
+		return initVar(xVar, newCtx.PkgAlias, newCtx.LIdent)
+
+	case *types.Named:
+		// NOTE[Dokiy] 2022/9/30:
+		// Need keep x and y isolated
+		// 	if xf.Name() == yf.Name() && types.NewPointer(x).String() == yf.Type().String() {
+		// 		stmts = append(stmts, assignStmt(nilBasic, nilBasic, newCtx.LIdent, token.MUL.String()+newCtx.RIdent))
+		// 		continue
+		// 	}
+	}
+
+	return nil
 }

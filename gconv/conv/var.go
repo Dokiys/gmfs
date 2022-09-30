@@ -7,7 +7,7 @@ import (
 	"go/types"
 )
 
-func initVar(obj types.Object, pkgAlias map[string]string, name string) []ast.Stmt {
+func initVar(obj types.Object, pkgAlias map[string]string, name string) ast.Stmt {
 	typ := obj.Type()
 	ident := ""
 	for {
@@ -22,12 +22,12 @@ func initVar(obj types.Object, pkgAlias map[string]string, name string) []ast.St
 			} else {
 				ident += fmt.Sprintf("%s.%s%s", alias, xx.Obj().Name(), "{}")
 			}
-			return []ast.Stmt{&ast.AssignStmt{
+			return &ast.AssignStmt{
 				Lhs: []ast.Expr{ast.NewIdent(name)},
 				Tok: token.ASSIGN,
 				// NOTE[Dokiy] 2022/9/30:
 				Rhs: []ast.Expr{ast.NewIdent(ident)},
-			}}
+			}
 		default:
 			return nil
 		}

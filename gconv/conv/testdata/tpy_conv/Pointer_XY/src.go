@@ -1,26 +1,11 @@
 package tpyconv
 
-type Aa struct {
-	P1 bool
-	P2 uint8
-	P3 uint16
-	P4 uint32
-	P5 uint64
-}
-
 type A struct {
-	P1 Aa
+	P1 bool
 }
 
-type Bb struct {
-	P1 bool
-	P2 uint8
-	P3 uint16
-	P4 uint32
-	P5 uint64
-}
 type B struct {
-	P1 *Bb
+	P1 bool
 }
 
 var X *A
