@@ -12,6 +12,7 @@ import (
 
 const specTab = "\t"
 const specEnter = "\n"
+const commentPrefix = "//"
 
 var TypInt = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
 
@@ -21,7 +22,7 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 		return err
 	}
 
-	var content string
+	var messages []string
 	fset := token.NewFileSet()
 	astf, err := parser.ParseFile(fset, "", string(src), parser.ParseComments)
 	if err != nil {
@@ -51,15 +52,12 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 					continue
 				}
 
-				content += specEnter
-				content += declCmt
-				content += specEnter
-				content += genMsg(cmap, st, name)
+				messages = append(messages, declCmt+specEnter+genMsg(cmap, st, name))
 			}
 		}
 	}
 
-	_, err = fmt.Fprint(w, content)
+	_, err = fmt.Fprint(w, strings.Join(messages, specEnter))
 	return err
 }
 
@@ -70,7 +68,7 @@ func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
 		msg += fmt.Sprintf("%s\n", genComment(cmap[field], specTab))
 		// gen field
 		if len(field.Names) <= 0 {
-			msg += "\t// Unknown field\n"
+			msg += "\t" + commentPrefix + " Unknown field\n"
 			continue
 		}
 		msg += fmt.Sprintf("\t%s %s = %d%s;\n", genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
