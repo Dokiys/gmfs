@@ -52,7 +52,6 @@ type TemplateData struct {
 	exp, _ := regexp.Compile(".*")
 	_ = gmfs.GenMsg(r, os.Stdout, *exp)
 	// Output:
-	//
 	//// Item Comment 1
 	///*
 	//	Item Comment 1
