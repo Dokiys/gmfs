@@ -1,5 +1,3 @@
 module github.com/Dokiys/codemates
 
-go 1.16
-
-require github.com/stretchr/testify v1.8.0 // indirect
+go 1.19

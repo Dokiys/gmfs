@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"regexp"
 	"strings"
 )
@@ -17,7 +16,7 @@ const specEnter = "\n"
 var TypInt = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
 
 func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
-	src, err := ioutil.ReadAll(r)
+	src, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
@@ -70,6 +69,10 @@ func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
 	for i, field := range st.Fields.List {
 		msg += fmt.Sprintf("%s\n", genComment(cmap[field], specTab))
 		// gen field
+		if len(field.Names) <= 0 {
+			msg += "\t// Unknown field\n"
+			continue
+		}
 		msg += fmt.Sprintf("\t%s %s = %d%s;\n", genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
 	}
 	msg += fmt.Sprintf("}")

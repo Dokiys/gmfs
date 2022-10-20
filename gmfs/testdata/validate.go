@@ -1,3 +1,5 @@
+//go:build gmfs
+
 package testdata
 
 import (
