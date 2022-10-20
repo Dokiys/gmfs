@@ -11,17 +11,21 @@ import (
 	"testing"
 
 	"github.com/Dokiys/codemates/gmfs"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestValidate(t *testing.T) {
 	f, err := os.Open("validate.go")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	w := os.Stdout
 	rex, _ := regexp.Compile(".*")
 	gmfs.RegisterValidateFunc(BindingValidateFunc)
-	assert.NoError(t, gmfs.GenMsg(f, w, *rex))
+	if err != nil {
+		t.Fatal(gmfs.GenMsg(f, w, *rex))
+	}
+
 }
 
 const TagBinding = "binding"
