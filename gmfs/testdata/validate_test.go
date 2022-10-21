@@ -13,6 +13,19 @@ import (
 	"github.com/Dokiys/codemates/gmfs"
 )
 
+func TestValidate2(t *testing.T) {
+	f, err := os.Open("template2.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := os.Stdout
+	rex, _ := regexp.Compile(".*")
+	gmfs.RegisterValidateFunc(BindingValidateFunc)
+	if err := gmfs.GenMsg(f, w, *rex); err != nil {
+		t.Fatal(err)
+	}
+}
 func TestValidate(t *testing.T) {
 	f, err := os.Open("validate.go")
 	if err != nil {
@@ -22,8 +35,8 @@ func TestValidate(t *testing.T) {
 	w := os.Stdout
 	rex, _ := regexp.Compile(".*")
 	gmfs.RegisterValidateFunc(BindingValidateFunc)
-	if err != nil {
-		t.Fatal(gmfs.GenMsg(f, w, *rex))
+	if err := gmfs.GenMsg(f, w, *rex); err != nil {
+		t.Fatal(err)
 	}
 
 }

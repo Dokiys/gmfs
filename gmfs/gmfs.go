@@ -68,7 +68,7 @@ func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
 		msg += fmt.Sprintf("%s\n", genComment(cmap[field], specTab))
 		// gen field
 		if len(field.Names) <= 0 {
-			msg += "\t" + commentPrefix + " Unknown field\n"
+			msg += "\t" + commentPrefix + " Unsupported field: " + genAAA(field) + "\n"
 			continue
 		}
 		msg += fmt.Sprintf("\t%s %s = %d%s;\n", genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
@@ -76,6 +76,18 @@ func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
 	msg += fmt.Sprintf("}")
 
 	return msg
+}
+
+// TODO[Dokiy] 2022/10/21:
+func genAAA(field *ast.Field) string {
+	var fieldNames []string
+	ast.Inspect(field, func(node ast.Node) bool {
+		if ident, ok := node.(*ast.Ident); ok {
+			fieldNames = append(fieldNames, ident.Name)
+		}
+		return true
+	})
+	return strings.Join(fieldNames, ".")
 }
 
 func genComment(cg []*ast.CommentGroup, spec string) (comment string) {

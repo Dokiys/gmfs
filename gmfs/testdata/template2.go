@@ -13,5 +13,6 @@ type Request struct {
 	StartTime time.Time `json:"start_time" binding:"required" time_format:"2006-01-02 15:04:05"` // 开始时间
 	EndTime   time.Time `json:"end_time" binding:"required" time_format:"2006-01-02 15:04:05"`   // 结束时间
 	Ids       []int     `json:"ids,omitempty"`
+	a.Condition
 	*Condition
 }
