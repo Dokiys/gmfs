@@ -62,18 +62,25 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 }
 
 func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
-	var msg = fmt.Sprintf("message %s {\n", name)
+	var msg = fmt.Sprintf("message %s {"+specEnter, name)
 
 	for i, field := range st.Fields.List {
-		msg += fmt.Sprintf("%s\n", genComment(cmap[field], specTab))
-		// gen field
+		msg += fmt.Sprintf("%s"+specEnter, genComment(cmap[field], specTab))
+
+		// unnamed parameters
 		if len(field.Names) <= 0 {
-			msg += "\t" + commentPrefix + " Unknown field\n"
+			msg += specTab + commentPrefix + " Unsupported field: " + getUnsupportedFieldName(field) + specEnter
 			continue
 		}
-		msg += fmt.Sprintf("\t%s %s = %d%s;\n", genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
+
+		// gen field
+		if isSupported(field.Type) {
+			msg += fmt.Sprintf(specTab+"%s %s = %d%s;"+specEnter, genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
+		} else {
+			msg += specTab + commentPrefix + " Unsupported field: " + field.Names[0].Name + specEnter
+		}
 	}
-	msg += fmt.Sprintf("}")
+	msg += "}"
 
 	return msg
 }
@@ -92,26 +99,55 @@ func genComment(cg []*ast.CommentGroup, spec string) (comment string) {
 }
 
 func genFiledTyp(expr ast.Expr) (name string) {
-	switch expr.(type) {
+	switch x := expr.(type) {
 	case *ast.Ident:
-		name = getIdentName(expr.(*ast.Ident))
+		name = getIdentName(x)
 
 	case *ast.SelectorExpr:
-		name = getSelectorExprName(expr.(*ast.SelectorExpr))
+		name = getSelectorExprName(x)
 
 	case *ast.StarExpr:
-		name = genFiledTyp(expr.(*ast.StarExpr).X)
+		name = genFiledTyp(x.X)
 
 	case *ast.MapType:
-		typ := expr.(*ast.MapType)
-		name = fmt.Sprintf("map<%s,%s>", genFiledTyp(typ.Key), genFiledTyp(typ.Value))
+		if k, v := genFiledTyp(x.Key), genFiledTyp(x.Value); (len(k) <= 0 || len(v) <= 0) ||
+			strings.HasPrefix(k, "repeated") ||
+			strings.HasPrefix(v, "repeated") {
+			return ""
+		}
+		name = fmt.Sprintf("map<%s,%s>", genFiledTyp(x.Key), genFiledTyp(x.Value))
 
 	case *ast.ArrayType:
-		name = "repeated" + " " + genFiledTyp(expr.(*ast.ArrayType).Elt)
-
+		if tpyName := genFiledTyp(x.Elt); len(tpyName) <= 0 ||
+			strings.HasPrefix(tpyName, "repeated") ||
+			strings.HasPrefix(tpyName, "map<") {
+			return ""
+		}
+		name = "repeated" + " " + genFiledTyp(x.Elt)
 	}
 
 	return name
+}
+
+func isSupported(typ ast.Expr) bool {
+	var times int
+	ast.Inspect(typ, func(node ast.Node) bool {
+		switch node.(type) {
+		case *ast.FuncType:
+			times += 2
+			return false
+
+		case *ast.MapType, *ast.ArrayType:
+			if times >= 1 {
+				times += 1
+				return false
+			}
+			times += 1
+			return true
+		}
+		return true
+	})
+	return times < 2
 }
 
 func getSelectorExprName(expr *ast.SelectorExpr) (name string) {
@@ -134,6 +170,24 @@ func getIdentName(ident *ast.Ident) (name string) {
 		name = ident.Name
 	}
 	return
+}
+
+func getUnsupportedFieldName(field *ast.Field) string {
+	var fieldName string
+	var typNames []string
+
+	ast.Inspect(field, func(node ast.Node) bool {
+		if _, ok := node.(*ast.StarExpr); ok {
+			fieldName = "*"
+		}
+		if ident, ok := node.(*ast.Ident); ok {
+			typNames = append(typNames, ident.Name)
+		}
+		return true
+	})
+
+	fieldName += strings.Join(typNames, ".")
+	return fieldName
 }
 
 func snakeName(name string) string {

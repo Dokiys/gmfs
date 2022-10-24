@@ -40,11 +40,11 @@ type TemplateData struct {
 	Map1  map[string]*Item
 
 	// Unsupported
-	//TdArr [][]string
-	//Map2 map[string][]*Item
-	//Map3 []map[string]*Item
-	//Map4 []map[*Item]string
-	//Map5 []map[string][]*Item
+	StrArr [][]string
+	MapArr map[string][]Item
+	aaa    func() bool
+	Condition
+	*a.Condition
 }
 `
 	r := bytes.NewReader([]byte(src))
@@ -75,5 +75,15 @@ type TemplateData struct {
 	//	repeated Item items = 2;
 	//
 	//	map<string,Item> map1 = 3;
+	// 	// Unsupported
+	//	// Unsupported field: StrArr
+	//
+	//	// Unsupported field: MapArr
+	//
+	//	// Unsupported field: aaa
+	//
+	//	// Unsupported field: Condition
+	//
+	//	// Unsupported field: *a.Condition
 	//}
 }

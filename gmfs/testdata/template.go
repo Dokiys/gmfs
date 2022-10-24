@@ -29,9 +29,9 @@ type TemplateData struct {
 	Map1  map[string]*Item
 
 	// Unsupported
-	//TdArr [][]string
-	//Map2 map[string][]*Item
-	//Map3 []map[string]*Item
-	//Map4 []map[*Item]string
-	//Map5 []map[string][]*Item
+	StrArr [][]string
+	MapArr map[string][]Item
+	aaa    func() bool
+	Condition
+	*a.Condition
 }
