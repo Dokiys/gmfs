@@ -6,14 +6,14 @@ import (
 )
 
 type typCtx struct {
-	PkgAlias map[string]string
-	Ignore   ignoreMap
-	LIdent   string
-	RIdent   string
+	PkgAlias      map[string]string
+	Ignore        ignoreMap
+	AssignedIdent string
+	AssignIdent   string
 }
 
 func NewTpyCtx(pkgAlias map[string]string, ignoreMap ignoreMap, lname, rname string) *typCtx {
-	return &typCtx{PkgAlias: pkgAlias, Ignore: ignoreMap, LIdent: lname, RIdent: rname}
+	return &typCtx{PkgAlias: pkgAlias, Ignore: ignoreMap, AssignedIdent: lname, AssignIdent: rname}
 }
 
 func (tcc *typCtx) merge(tpyCtx *typCtx) *typCtx {
@@ -23,11 +23,11 @@ func (tcc *typCtx) merge(tpyCtx *typCtx) *typCtx {
 
 	tcc.Ignore = tpyCtx.Ignore
 	tcc.PkgAlias = tpyCtx.PkgAlias
-	if len(tpyCtx.LIdent) > 0 {
-		tcc.LIdent = tpyCtx.LIdent + "." + tcc.LIdent
+	if len(tpyCtx.AssignedIdent) > 0 {
+		tcc.AssignedIdent = tpyCtx.AssignedIdent + "." + tcc.AssignedIdent
 	}
-	if len(tpyCtx.RIdent) > 0 {
-		tcc.RIdent = tpyCtx.RIdent + "." + tcc.RIdent
+	if len(tpyCtx.AssignIdent) > 0 {
+		tcc.AssignIdent = tpyCtx.AssignIdent + "." + tcc.AssignIdent
 	}
 
 	return tcc
@@ -44,11 +44,7 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 
 	switch x := lt.(type) {
 	case *types.Basic:
-		y, ok := rt.(*types.Basic)
-		if !ok {
-			return nil
-		}
-		return append(stmt, assign(x, y, ctx.LIdent, ctx.RIdent))
+		return append(stmt, tryAssign(lt, rt, ctx.AssignedIdent, ctx.AssignIdent))
 
 	case *types.Struct:
 		y, ok := rt.(*types.Struct)
@@ -76,36 +72,15 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 				continue
 			}
 
-			var newCtx = (&typCtx{LIdent: xVar.Name(), RIdent: yVar.Name()}).merge(ctx)
-			if newCtx.shouldIgnore(newCtx.LIdent) {
+			var newCtx = (&typCtx{AssignedIdent: xVar.Name(), AssignIdent: yVar.Name()}).merge(ctx)
+			if newCtx.shouldIgnore(newCtx.AssignedIdent) {
 				continue
 			}
 
-			// Handle completely same type field
-			if xVar.String() == yVar.String() {
-				stmts = append(stmts, noneAssign(newCtx.LIdent, newCtx.RIdent))
+			// Assign same type field
+			if types.IdenticalIgnoreTags(lt, rt) {
+				stmts = append(stmts, assgin(newCtx.AssignedIdent, newCtx.AssignIdent))
 				continue
-			}
-
-			switch xVar.Type().(type) {
-			case *types.Pointer:
-				// NOTE[Dokiy] 2022/9/30:
-				// Need keep x and y isolated
-				//	if xVar.Name() == yVar.Name() && xVar.Type().String() == types.NewPointer(yVar.Type()).String() {
-				//		stmts = append(stmts, noneAssign(ctx.LIdent, token.AND.String()+ctx.RIdent))
-				//		continue
-				//	}
-				if stmt := initVar(xVar, newCtx.PkgAlias, newCtx.LIdent); stmt != nil {
-					stmts = append(stmts, stmt)
-				}
-
-			case *types.Named:
-				// NOTE[Dokiy] 2022/9/30:
-				// Need keep x and y isolated
-				// 	if xf.Name() == yf.Name() && types.NewPointer(x).String() == yf.Type().String() {
-				// 		stmts = append(stmts, assignStmt(nilBasic, nilBasic, newCtx.LIdent, token.MUL.String()+newCtx.RIdent))
-				// 		continue
-				// 	}
 			}
 
 			stmts = append(stmts, GenTpyConv(newCtx, xVar.Type(), yVar.Type())...)
@@ -113,51 +88,42 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (stmt []ast.Stmt) {
 		return stmts
 
 	case *types.Named:
+		// Assign same type field
+		if types.IdenticalIgnoreTags(lt, rt) {
+			return []ast.Stmt{assgin(ctx.AssignedIdent, ctx.AssignIdent)}
+		}
+
 		return GenTpyConv(ctx, x.Underlying(), underTpy(rt))
 
 	case *types.Pointer:
-		return GenTpyConv(ctx, x.Elem(), underTpy(rt))
+		stmts := make([]ast.Stmt, 0)
+		// Assign same type field
+		if types.IdenticalIgnoreTags(lt, rt) {
+			return []ast.Stmt{assgin(ctx.AssignedIdent, ctx.AssignIdent)}
+		}
+
+		// NOTE[Dokiy] 2023/1/4: **A unsupported
+		if stmt := initVar(x, ctx.PkgAlias, ctx.AssignedIdent); stmt != nil {
+			stmts = append(stmts, stmt)
+		}
+		return append(stmts, GenTpyConv(ctx, x.Elem(), underTpy(rt))...)
 
 	case *types.Slice, *types.Array:
 		// TODO[Dokiy] 2022/9/30:
-		//for i = 0; i < len(params); i++ {
+		// for i = 0; i < len(params); i++ {
 		//	result[i].id = params[i].id
-		//}
+		// }
 		//
 		return nil
 
 	case *types.Map:
-		// NOTE[Dokiy] 2022/9/29: v0.2
-		if lt.String() == rt.String() {
-			return []ast.Stmt{noneAssign(ctx.LIdent, ctx.RIdent)}
+		if types.IdenticalIgnoreTags(lt, rt) {
+			return []ast.Stmt{assgin(ctx.AssignedIdent, ctx.AssignIdent)}
 		}
 		return nil
 
 	default:
 	}
-	// NOTE[Dokiy] 2022/9/29: 记录未处理到字段，统一打印提示
+	// NOTE[Dokiy] 2022/9/29: add_err
 	panic("Unsupported type")
-}
-
-func tryInit(newCtx *typCtx, xVar, yVar *types.Var) ast.Stmt {
-	switch xVar.Type().(type) {
-	case *types.Pointer:
-		// NOTE[Dokiy] 2022/9/30:
-		// Need keep x and y isolated
-		//	if xVar.Name() == yVar.Name() && xVar.Type().String() == types.NewPointer(yVar.Type()).String() {
-		//		stmts = append(stmts, noneAssign(ctx.LIdent, token.AND.String()+ctx.RIdent))
-		//		continue
-		//	}
-		return initVar(xVar, newCtx.PkgAlias, newCtx.LIdent)
-
-	case *types.Named:
-		// NOTE[Dokiy] 2022/9/30:
-		// Need keep x and y isolated
-		// 	if xf.Name() == yf.Name() && types.NewPointer(x).String() == yf.Type().String() {
-		// 		stmts = append(stmts, assignStmt(nilBasic, nilBasic, newCtx.LIdent, token.MUL.String()+newCtx.RIdent))
-		// 		continue
-		// 	}
-	}
-
-	return nil
 }

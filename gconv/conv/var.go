@@ -7,8 +7,7 @@ import (
 	"go/types"
 )
 
-func initVar(obj types.Object, pkgAlias map[string]string, name string) ast.Stmt {
-	typ := obj.Type()
+func initVar(typ types.Type, pkgAlias map[string]string, name string) ast.Stmt {
 	ident := ""
 	for {
 		switch xx := typ.(type) {
@@ -34,31 +33,53 @@ func initVar(obj types.Object, pkgAlias map[string]string, name string) ast.Stmt
 	}
 }
 
-func noneAssign(lname string, rname string) ast.Stmt {
+func assgin(assigned string, assign string) ast.Stmt {
 	return &ast.AssignStmt{
-		Lhs: []ast.Expr{ast.NewIdent(lname)},
+		Lhs: []ast.Expr{ast.NewIdent(assigned)},
 		Tok: token.ASSIGN,
-		Rhs: []ast.Expr{ast.NewIdent(rname)},
+		Rhs: []ast.Expr{ast.NewIdent(assign)},
 	}
 }
 
-func assign(lt *types.Basic, rt *types.Basic, lname string, rname string) ast.Stmt {
-	// Assign the same type.
-	if lt.String() == rt.String() {
+func tryAssign(assignedTyp types.Type, assignTyp types.Type, assigned string, assign string) ast.Stmt {
+	if types.AssignableTo(assignTyp, assignedTyp) {
 		return &ast.AssignStmt{
-			Lhs: []ast.Expr{ast.NewIdent(lname)},
+			Lhs: []ast.Expr{ast.NewIdent(assigned)},
 			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{ast.NewIdent(rname)},
+			Rhs: []ast.Expr{ast.NewIdent(assign)},
 		}
 	}
 
-	// Assign different integer type, but can be converted
-	if lt.Info()&types.IsInteger != 0 {
-		rname = fmt.Sprintf("(%s)%s", lt.Name(), rname)
+	// Assign different type which can be converted
+	if types.ConvertibleTo(assignTyp, assignedTyp) {
+		assign = fmt.Sprintf("(%s)%s", assignedTyp.String(), assign)
 		return &ast.AssignStmt{
-			Lhs: []ast.Expr{ast.NewIdent(lname)},
+			Lhs: []ast.Expr{ast.NewIdent(assigned)},
 			Tok: token.ASSIGN,
-			Rhs: []ast.Expr{ast.NewIdent(rname)},
+			Rhs: []ast.Expr{ast.NewIdent(assign)},
+		}
+	}
+
+	// NOTE[Dokiy] 2022/9/30: add_err
+	panic("Unsupported AssignStmt!")
+}
+
+func setField(assignedTyp types.Type, assignTyp types.Type, assigned string, assign string) ast.Stmt {
+	if types.AssignableTo(assignTyp, assignedTyp) {
+		return &ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(assigned)},
+			Tok: token.COLON,
+			Rhs: []ast.Expr{ast.NewIdent(assign)},
+		}
+	}
+
+	// Assign different type which can be converted
+	if types.ConvertibleTo(assignTyp, assignedTyp) {
+		assign = fmt.Sprintf("(%s)%s", assignedTyp.String(), assign)
+		return &ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(assigned)},
+			Tok: token.COLON,
+			Rhs: []ast.Expr{ast.NewIdent(assign)},
 		}
 	}
 

@@ -33,8 +33,8 @@ func TestGenTpyConv(t *testing.T) {
 	const wantFile = "want"
 
 	var defCtx = &typCtx{
-		LIdent: "x",
-		RIdent: "y",
+		AssignedIdent: "x",
+		AssignIdent:   "y",
 	}
 
 	tests := []struct {
