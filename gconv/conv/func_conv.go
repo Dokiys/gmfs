@@ -204,7 +204,12 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 
 func (f *fnConv) convField(resultName, paramName string) []ast.Stmt {
 	tc := NewTpyCtx(f.impAlias, f.Ignore, resultName, paramName)
-	return GenTpyConv(tc, f.typeOfResult(), f.typeOfParam())
+	return []ast.Stmt{&ast.AssignStmt{
+		Lhs:    nil,
+		TokPos: 0,
+		Tok:    token.DEFINE,
+		Rhs:    GenTpyConv(tc, f.typeOfResult(), f.typeOfParam()),
+	}}
 }
 
 func getFields(tpy types.Type, ignore ignoreMap) []*types.Var {

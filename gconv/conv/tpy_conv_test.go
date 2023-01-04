@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
+	"go/types"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,20 +14,6 @@ import (
 
 	"golang.org/x/tools/go/packages"
 )
-
-func strStmts(stmts []ast.Stmt) string {
-	// Create a FileSet for node. Since the node does not come
-	// from a real source file, fset will be empty.
-	fset := token.NewFileSet()
-	var buf bytes.Buffer
-
-	err := format.Node(&buf, fset, stmts)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return buf.String()
-}
 
 func TestGenTpyConv(t *testing.T) {
 	const X, Y = "X", "Y"
@@ -75,8 +62,7 @@ func TestGenTpyConv(t *testing.T) {
 					continue
 				}
 
-				stmt := GenTpyConv(tt.typCtx, x.Type(), y.Type())
-				got := strStmts(stmt)
+				got := printConvExpr(x, GenTpyConv(tt.typCtx, x.Type(), y.Type()))
 				expected, err := os.ReadFile(filepath.Join(gopath, tt.name, wantFile))
 				if err != nil {
 					t.Fatalf("%s: read wantFile file err: %s", wantFile, err)
@@ -90,4 +76,43 @@ func TestGenTpyConv(t *testing.T) {
 			t.Fatalf("test must declare both %s and %s", X, Y)
 		})
 	}
+}
+
+// TODO[Dokiy] 2023/1/4: to be continued!
+func printConvExpr(x types.Object, expr []ast.Expr) string {
+	var op token.Token
+	if _, ok := x.Type().(*types.Pointer); ok {
+		op = token.AND
+	}
+
+	var stmts []ast.Stmt
+	stmts = append(stmts, &ast.AssignStmt{
+		Lhs: []ast.Expr{ast.NewIdent(x.Name())},
+		Tok: token.DEFINE,
+		Rhs: []ast.Expr{&ast.UnaryExpr{
+			Op: op,
+			X: &ast.CompositeLit{
+				Type: &ast.Ident{
+					Name: x.Name(),
+				},
+				Elts: expr,
+			},
+		}},
+	})
+
+	return strStmts(stmts)
+}
+
+func strStmts(stmts []ast.Stmt) string {
+	// Create a FileSet for node. Since the node does not come
+	// from a real source file, fset will be empty.
+	fset := token.NewFileSet()
+	var buf bytes.Buffer
+
+	err := format.Node(&buf, fset, stmts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return buf.String()
 }
