@@ -19,10 +19,7 @@ func TestGenTpyConv(t *testing.T) {
 	const X, Y = "X", "Y"
 	const wantFile = "want"
 
-	var defCtx = &typCtx{
-		AssignedIdent: "x",
-		AssignIdent:   "y",
-	}
+	var defCtx = &typCtx{}
 
 	tests := []struct {
 		name   string
@@ -62,7 +59,9 @@ func TestGenTpyConv(t *testing.T) {
 					continue
 				}
 
-				got := printConvExpr(x, GenTpyConv(tt.typCtx, x.Type(), y.Type()))
+				tt.typCtx.KeyName = x.Name()
+				tt.typCtx.ValueName = y.Name()
+				got := printConvExpr(tt.typCtx, x, GenTpyConv(tt.typCtx, x.Type(), y.Type()))
 				expected, err := os.ReadFile(filepath.Join(gopath, tt.name, wantFile))
 				if err != nil {
 					t.Fatalf("%s: read wantFile file err: %s", wantFile, err)
@@ -78,38 +77,17 @@ func TestGenTpyConv(t *testing.T) {
 	}
 }
 
-// TODO[Dokiy] 2023/1/4: to be continued!
-func printConvExpr(x types.Object, expr []ast.Expr) string {
-	var op token.Token
-	if _, ok := x.Type().(*types.Pointer); ok {
-		op = token.AND
-	}
-
-	var stmts []ast.Stmt
-	stmts = append(stmts, &ast.AssignStmt{
-		Lhs: []ast.Expr{ast.NewIdent(x.Name())},
-		Tok: token.DEFINE,
-		Rhs: []ast.Expr{&ast.UnaryExpr{
-			Op: op,
-			X: &ast.CompositeLit{
-				Type: &ast.Ident{
-					Name: x.Name(),
-				},
-				Elts: expr,
-			},
-		}},
-	})
-
-	return strStmts(stmts)
-}
-
-func strStmts(stmts []ast.Stmt) string {
+func printConvExpr(ctx *typCtx, x types.Object, expr []ast.Expr) string {
 	// Create a FileSet for node. Since the node does not come
 	// from a real source file, fset will be empty.
 	fset := token.NewFileSet()
 	var buf bytes.Buffer
 
-	err := format.Node(&buf, fset, stmts)
+	err := format.Node(&buf, fset, &ast.AssignStmt{
+		Lhs: []ast.Expr{ast.NewIdent(x.Name())},
+		Tok: token.DEFINE,
+		Rhs: []ast.Expr{newStruct(x.Type(), ctx.PkgAlias, x.Name(), expr...)},
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -7,49 +7,42 @@ import (
 	"go/types"
 )
 
-func assignStruct(typ types.Type, pkgAlias map[string]string, name string, kvExprs ...ast.Expr) []ast.Expr {
-	var expr = &ast.UnaryExpr{}
-	for {
-		switch xx := typ.(type) {
-		case *types.Pointer:
-			typ = xx.Elem()
-			expr.Op = token.AND
-			continue
-		case *types.Named:
-			expr.Op = token.AND
-			elts := make([]ast.Expr, 0, len(kvExprs))
-			for _, e := range kvExprs {
-				elts = append(elts, e)
-			}
-			if alias, ok := pkgAlias[xx.Obj().Pkg().Path()]; !ok {
-				expr.X = &ast.CompositeLit{
-					Type: ast.NewIdent(xx.Obj().Name()),
-					Elts: elts,
-				}
-			} else {
-				expr.X = &ast.CompositeLit{
-					Type: &ast.SelectorExpr{
-						X: &ast.Ident{
-							Name: alias,
-						},
-						Sel: &ast.Ident{
-							Name: xx.Obj().Name(),
-						},
-					},
-					Elts: elts,
-				}
-			}
-			return []ast.Expr{&ast.KeyValueExpr{
-				Key:   ast.NewIdent(name),
-				Value: expr,
-			}}
-		default:
-			return nil
+func newStruct(typ types.Type, pkgAlias map[string]string, name string, kvExpr ...ast.Expr) ast.Expr {
+	switch xx := typ.(type) {
+	case *types.Pointer:
+		return &ast.UnaryExpr{
+			Op: token.AND,
+			X:  newStruct(xx.Elem(), pkgAlias, name, kvExpr...),
 		}
+	case *types.Named:
+		elts := make([]ast.Expr, 0, len(kvExpr))
+		for _, e := range kvExpr {
+			elts = append(elts, e)
+		}
+		if alias, ok := pkgAlias[xx.Obj().Pkg().Path()]; !ok {
+			return &ast.CompositeLit{
+				Type: ast.NewIdent(xx.Obj().Name()),
+				Elts: elts,
+			}
+		} else {
+			return &ast.CompositeLit{
+				Type: &ast.SelectorExpr{
+					X: &ast.Ident{
+						Name: alias,
+					},
+					Sel: &ast.Ident{
+						Name: xx.Obj().Name(),
+					},
+				},
+				Elts: elts,
+			}
+		}
+	default:
+		return nil
 	}
 }
 
-func assignKV(key string, value string) ast.Expr {
+func kv(key string, value string) ast.Expr {
 	return &ast.KeyValueExpr{
 		Key:   ast.NewIdent(key),
 		Value: ast.NewIdent(value),
@@ -66,12 +59,14 @@ func tryAssign(keyTyp types.Type, valueType types.Type, key string, value string
 
 	// Assign different type which can be converted
 	if types.ConvertibleTo(valueType, keyTyp) {
-		value = fmt.Sprintf("(%s)%s", keyTyp.String(), value)
-		return &ast.CallExpr{
-			Fun: &ast.Ident{
-				Name: keyTyp.String(),
+		return &ast.KeyValueExpr{
+			Key: ast.NewIdent(key),
+			Value: &ast.CallExpr{
+				Fun: &ast.Ident{
+					Name: keyTyp.String(),
+				},
+				Args: []ast.Expr{ast.NewIdent(value)},
 			},
-			Args: []ast.Expr{ast.NewIdent(value)},
 		}
 	}
 

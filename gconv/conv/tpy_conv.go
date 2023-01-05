@@ -6,14 +6,14 @@ import (
 )
 
 type typCtx struct {
-	PkgAlias      map[string]string
-	Ignore        ignoreMap
-	AssignedIdent string
-	AssignIdent   string
+	PkgAlias  map[string]string
+	Ignore    ignoreMap
+	KeyName   string
+	ValueName string
 }
 
 func NewTpyCtx(pkgAlias map[string]string, ignoreMap ignoreMap, lname, rname string) *typCtx {
-	return &typCtx{PkgAlias: pkgAlias, Ignore: ignoreMap, AssignedIdent: lname, AssignIdent: rname}
+	return &typCtx{PkgAlias: pkgAlias, Ignore: ignoreMap, KeyName: lname, ValueName: rname}
 }
 
 func (tcc *typCtx) merge(tpyCtx *typCtx) *typCtx {
@@ -23,9 +23,9 @@ func (tcc *typCtx) merge(tpyCtx *typCtx) *typCtx {
 
 	tcc.Ignore = tpyCtx.Ignore
 	tcc.PkgAlias = tpyCtx.PkgAlias
-	tcc.AssignedIdent = tcc.AssignedIdent
-	if len(tpyCtx.AssignIdent) > 0 {
-		tcc.AssignIdent = tpyCtx.AssignIdent + "." + tcc.AssignIdent
+	tcc.KeyName = tcc.KeyName
+	if len(tpyCtx.ValueName) > 0 {
+		tcc.ValueName = tpyCtx.ValueName + "." + tcc.ValueName
 	}
 
 	return tcc
@@ -42,7 +42,7 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (expr []ast.Expr) {
 
 	switch x := lt.(type) {
 	case *types.Basic:
-		return append(expr, tryAssign(lt, rt, ctx.AssignedIdent, ctx.AssignIdent))
+		return append(expr, tryAssign(lt, rt, ctx.KeyName, ctx.ValueName))
 
 	case *types.Struct:
 		y, ok := rt.(*types.Struct)
@@ -70,14 +70,14 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (expr []ast.Expr) {
 				continue
 			}
 
-			var newCtx = (&typCtx{AssignedIdent: xVar.Name(), AssignIdent: yVar.Name()}).merge(ctx)
-			if newCtx.shouldIgnore(newCtx.AssignedIdent) {
+			var newCtx = (&typCtx{KeyName: xVar.Name(), ValueName: yVar.Name()}).merge(ctx)
+			if newCtx.shouldIgnore(newCtx.KeyName) {
 				continue
 			}
 
 			// Assign same type field
 			if types.IdenticalIgnoreTags(lt, rt) {
-				exprs = append(exprs, assignKV(newCtx.AssignedIdent, newCtx.AssignIdent))
+				exprs = append(exprs, kv(newCtx.KeyName, newCtx.ValueName))
 				continue
 			}
 
@@ -88,7 +88,7 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (expr []ast.Expr) {
 	case *types.Named:
 		// Assign same type field
 		if types.IdenticalIgnoreTags(lt, rt) {
-			return []ast.Expr{assignKV(ctx.AssignedIdent, ctx.AssignIdent)}
+			return []ast.Expr{kv(ctx.KeyName, ctx.ValueName)}
 		}
 
 		return GenTpyConv(ctx, x.Underlying(), underTpy(rt))
@@ -96,11 +96,11 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (expr []ast.Expr) {
 	case *types.Pointer:
 		// Assign same type field
 		if types.IdenticalIgnoreTags(lt, rt) {
-			return []ast.Expr{assignKV(ctx.AssignedIdent, ctx.AssignIdent)}
+			return []ast.Expr{kv(ctx.KeyName, ctx.ValueName)}
 		}
 
 		// NOTE[Dokiy] 2023/1/4: **A unsupported
-		return assignStruct(x, ctx.PkgAlias, ctx.AssignedIdent, GenTpyConv(ctx, x.Elem(), underTpy(rt))...)
+		return []ast.Expr{newStruct(x, ctx.PkgAlias, ctx.KeyName, GenTpyConv(ctx, x.Elem(), underTpy(rt))...)}
 
 	case *types.Slice, *types.Array:
 		// TODO[Dokiy] 2022/9/30:
@@ -112,7 +112,7 @@ func GenTpyConv(ctx *typCtx, lt types.Type, rt types.Type) (expr []ast.Expr) {
 
 	case *types.Map:
 		if types.IdenticalIgnoreTags(lt, rt) {
-			return []ast.Expr{assignKV(ctx.AssignedIdent, ctx.AssignIdent)}
+			return []ast.Expr{kv(ctx.KeyName, ctx.ValueName)}
 		}
 		return nil
 
