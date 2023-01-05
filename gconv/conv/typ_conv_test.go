@@ -1,15 +1,11 @@
 package conv
 
 import (
-	"bytes"
 	"context"
-	"go/ast"
 	"go/format"
-	"go/token"
-	"go/types"
-	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/tools/go/packages"
@@ -19,18 +15,16 @@ func TestGenTpyConv(t *testing.T) {
 	const X, Y = "X", "Y"
 	const wantFile = "want"
 
-	var defCtx = &typCtx{}
-
 	tests := []struct {
-		name   string
-		typCtx *typCtx
+		name string
 	}{
-		{"Basic", defCtx},
-		{"Nested", defCtx},
-		{"PkgStruct_basic", defCtx},
-		{"Pointer_X", defCtx},
-		{"Pointer_XY", defCtx},
-		{"Pointer_Y", defCtx},
+		{"Basic"},
+		// TODO[Dokiy] 2023/1/5: to be continued!
+		{"Nested"},
+		{"PkgStruct_basic"},
+		{"Pointer_X"},
+		{"Pointer_XY"},
+		{"Pointer_Y"},
 		// TODO[Dokiy] 2022/9/30: arr, slice
 	}
 	for _, tt := range tests {
@@ -50,23 +44,31 @@ func TestGenTpyConv(t *testing.T) {
 				t.Fatalf("%s: incorrect test src: %s", tt.name, err)
 			}
 			for i, pkg := range pkgs {
-				// init pkg alias
-				tt.typCtx.PkgAlias = parseImportAlias(pkg.Syntax[i])
-
 				x := pkg.Types.Scope().Lookup(X)
 				y := pkg.Types.Scope().Lookup(Y)
 				if x == nil || y == nil {
 					continue
 				}
 
-				tt.typCtx.KeyName = x.Name()
-				tt.typCtx.ValueName = y.Name()
-				got := printConvExpr(tt.typCtx, x, GenTpyConv(tt.typCtx, x.Type(), y.Type()))
+				tcg := &TypConvGen{
+					Ctx:      NewTypCtx(x.Name(), y.Name()),
+					g:        newGener(""),
+					pkgAlias: parseImportAlias(pkg.Syntax[i]),
+					ignore:   nil,
+					kt:       x.Type(),
+					vt:       y.Type(),
+				}
+				tcg.gen()
+
+				got, err := format.Source([]byte(tcg.g.string()))
+				if err != nil {
+					t.Fatalf("%s: format genSrc err: %s", wantFile, err)
+				}
 				expected, err := os.ReadFile(filepath.Join(gopath, tt.name, wantFile))
 				if err != nil {
 					t.Fatalf("%s: read wantFile file err: %s", wantFile, err)
 				}
-				if got != string(expected) {
+				if strings.Compare(string(got), string(expected)) != 0 {
 					t.Errorf("got:\n%s\nexpected:\n%s\n", got, expected)
 				}
 
@@ -75,22 +77,4 @@ func TestGenTpyConv(t *testing.T) {
 			t.Fatalf("test must declare both %s and %s", X, Y)
 		})
 	}
-}
-
-func printConvExpr(ctx *typCtx, x types.Object, expr []ast.Expr) string {
-	// Create a FileSet for node. Since the node does not come
-	// from a real source file, fset will be empty.
-	fset := token.NewFileSet()
-	var buf bytes.Buffer
-
-	err := format.Node(&buf, fset, &ast.AssignStmt{
-		Lhs: []ast.Expr{ast.NewIdent(x.Name())},
-		Tok: token.DEFINE,
-		Rhs: []ast.Expr{newStruct(x.Type(), ctx.PkgAlias, x.Name(), expr...)},
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return buf.String()
 }
