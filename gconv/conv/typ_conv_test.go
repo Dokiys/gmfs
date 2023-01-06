@@ -51,17 +51,17 @@ func TestGenTpyConv(t *testing.T) {
 				}
 
 				tcg := &TypConvGen{
-					Ctx:      NewTypCtx(x.Name(), y.Name()),
 					g:        newGener(""),
 					pkgAlias: parseImportAlias(pkg.Syntax[i]),
 					ignore:   nil,
 					kt:       x.Type(),
 					vt:       y.Type(),
 				}
-				tcg.gen()
+				tcg.Gen(NewTypCtx(x.Name(), y.Name()))
 
 				got, err := format.Source([]byte(tcg.g.string()))
 				if err != nil {
+					t.Log(tcg.g.string())
 					t.Fatalf("%s: format genSrc err: %s", wantFile, err)
 				}
 				expected, err := os.ReadFile(filepath.Join(gopath, tt.name, wantFile))

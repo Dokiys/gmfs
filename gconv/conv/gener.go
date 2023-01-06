@@ -6,7 +6,8 @@ import (
 )
 
 type gener struct {
-	buf    bytes.Buffer
+	buf bytes.Buffer
+	// TODO[Dokiy] 2023/1/6: delete
 	prefix string
 }
 

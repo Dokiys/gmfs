@@ -204,14 +204,13 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 
 func (f *fnConv) convField(resultName, paramName string) []ast.Stmt {
 	tcg := &TypConvGen{
-		Ctx:      NewTypCtx(resultName, paramName),
 		g:        newGener(""),
 		pkgAlias: f.impAlias,
 		ignore:   f.Ignore,
 		kt:       f.typeOfResult(),
 		vt:       f.typeOfParam(),
 	}
-	tcg.gen()
+	tcg.Gen(NewTypCtx(resultName, paramName))
 	// TODO[Dokiy] 2023/1/5:
 	return []ast.Stmt{&ast.AssignStmt{
 		Lhs:    nil,
