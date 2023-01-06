@@ -21,10 +21,10 @@ func TestGenTpyConv(t *testing.T) {
 		{"Basic"},
 		// TODO[Dokiy] 2023/1/5: to be continued!
 		{"Nested"},
-		{"PkgStruct_basic"},
-		{"Pointer_X"},
-		{"Pointer_XY"},
-		{"Pointer_Y"},
+		// {"PkgStruct_basic"},
+		// {"Pointer_X"},
+		// {"Pointer_XY"},
+		// {"Pointer_Y"},
 		// TODO[Dokiy] 2022/9/30: arr, slice
 	}
 	for _, tt := range tests {

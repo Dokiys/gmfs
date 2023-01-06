@@ -142,14 +142,16 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 
 			// Assign same type field
 			if types.IdenticalIgnoreTags(tcg.kt, tcg.vt) {
-				tcg.kv(newCtx, newCtx.keyName, newCtx.valueName)
+				tcg.g.p("%s: %s,\n", newCtx.keyName, newCtx.valueName)
+				// tcg.kv(newCtx, newCtx.keyName, newCtx.valueName)
 				continue
 			}
 
 			// struct keep kv
 			forkedTcg := tcg.forkWithGener(xVar.Type(), yVar.Type(), newGener(""))
 			forkedTcg.Gen(newCtx)
-			tcg.kv(ctx, newCtx.keyName, forkedTcg.g.string())
+			tcg.g.p("%s: %s,\n", newCtx.keyName, forkedTcg.g.string())
+			// tcg.kv(ctx, newCtx.keyName, forkedTcg.g.string())
 		}
 		return
 
@@ -160,6 +162,7 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			return
 		}
 
+		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
 		var name = x.Obj().Name()
 		if alias, ok := tcg.pkgAlias[x.Obj().Pkg().Path()]; ok {
 			name = alias + "." + name
@@ -180,6 +183,7 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			return
 		}
 
+		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
 		// NOTE[Dokiy] 2023/1/4: **A unsupported
 		forkedTcg := tcg.fork(x.Elem(), underTpy(tcg.vt))
 		forkedTcg.Gen(ctx)
