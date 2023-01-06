@@ -21,7 +21,7 @@ func TestGenTpyConv(t *testing.T) {
 		{"Basic"},
 		// TODO[Dokiy] 2023/1/5: to be continued!
 		{"Nested"},
-		// {"PkgStruct_basic"},
+		{"PkgStruct_basic"},
 		// {"Pointer_X"},
 		// {"Pointer_XY"},
 		// {"Pointer_Y"},
