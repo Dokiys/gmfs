@@ -60,14 +60,7 @@ type TypConvGen struct {
 }
 
 func (tcg *TypConvGen) fork(kt, vt types.Type) *TypConvGen {
-	// return tcg.forkWithGener(kt, vt, tcg.g)
-	return &TypConvGen{
-		g:        newGener(""),
-		pkgAlias: tcg.pkgAlias,
-		ignore:   tcg.ignore,
-		kt:       kt,
-		vt:       vt,
-	}
+	return tcg.forkWithGener(kt, vt, newGener(""))
 }
 
 func (tcg *TypConvGen) forkWithGener(kt, vt types.Type, g *gener) *TypConvGen {
@@ -169,7 +162,10 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 		}
 
 		forkedTcg := tcg.forkWithGener(x.Underlying(), underTpy(tcg.vt), newGener(""))
+		pValueOnly := ctx.pValueOnly
+		ctx.pValueOnly = true
 		forkedTcg.Gen(ctx)
+		ctx.pValueOnly = pValueOnly
 		tcg.kv(ctx, ctx.keyName, fmt.Sprintf("%s{\n%s}", name, forkedTcg.g.string()))
 		// tcg.structDefine(x, forked
 		// Tcg.g.string())
@@ -183,10 +179,14 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			return
 		}
 
+		// TODO[Dokiy] 2023/1/9: to be continued!
 		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
 		// NOTE[Dokiy] 2023/1/4: **A unsupported
 		forkedTcg := tcg.fork(x.Elem(), underTpy(tcg.vt))
+		pValueOnly := ctx.pValueOnly
+		ctx.pValueOnly = true
 		forkedTcg.Gen(ctx)
+		ctx.pValueOnly = pValueOnly
 		tcg.kv(ctx, ctx.keyName, "&"+forkedTcg.g.string())
 		return
 
