@@ -13,17 +13,22 @@ const (
 )
 
 type TypConvContext struct {
-	keyName        string
-	valueName      string
+	kt        types.Type
+	keyName   string
+	vt        types.Type
+	valueName string
+
 	assignToken    string
 	structTrailing string
 
 	pValueOnly bool
 }
 
-func NewTypCtx(keyName, valueName string) *TypConvContext {
+func NewTypCtx(keyName, valueName string, kt, vt types.Type) *TypConvContext {
 	return &TypConvContext{
+		kt:             kt,
 		keyName:        keyName,
+		vt:             vt,
 		valueName:      valueName,
 		assignToken:    assignToken_DEFINE,
 		structTrailing: structTrailing_ENTER,
@@ -31,45 +36,35 @@ func NewTypCtx(keyName, valueName string) *TypConvContext {
 	}
 }
 
-func mergeCtx(tpyCtx *TypConvContext, keyName, valueName string) *TypConvContext {
-	if tpyCtx == nil {
+func (ctx *TypConvContext) mergeName(keyName, valueName string) *TypConvContext {
+	if ctx == nil {
 		return nil
 	}
 
-	keyName = keyName
-	if len(tpyCtx.valueName) > 0 {
-		valueName = tpyCtx.valueName + "." + valueName
+	ctx.keyName = keyName
+	if len(ctx.valueName) > 0 {
+		ctx.valueName = ctx.valueName + "." + valueName
 	}
 
-	return &TypConvContext{
-		keyName:        keyName,
-		valueName:      valueName,
-		assignToken:    tpyCtx.assignToken,
-		structTrailing: tpyCtx.structTrailing,
-		pValueOnly:     tpyCtx.pValueOnly,
-	}
+	return ctx
 }
 
 type TypConvGen struct {
 	g *gener
 
-	pkgAlias map[string]string
+	pkgAlias pkgAliasMap
 	ignore   ignoreMap
-	kt       types.Type
-	vt       types.Type
 }
 
-func (tcg *TypConvGen) fork(kt, vt types.Type) *TypConvGen {
-	return tcg.forkWithGener(kt, vt, newGener(""))
+func (tcg *TypConvGen) fork() *TypConvGen {
+	return tcg.forkWithGener(newGener(""))
 }
 
-func (tcg *TypConvGen) forkWithGener(kt, vt types.Type, g *gener) *TypConvGen {
+func (tcg *TypConvGen) forkWithGener(g *gener) *TypConvGen {
 	return &TypConvGen{
 		g:        g,
 		pkgAlias: tcg.pkgAlias,
 		ignore:   tcg.ignore,
-		kt:       kt,
-		vt:       vt,
 	}
 }
 
@@ -78,16 +73,16 @@ func (tcg *TypConvGen) shouldIgnore(name string) bool {
 }
 
 func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
-	switch x := tcg.kt.(type) {
+	switch x := ctx.kt.(type) {
 	case *types.Basic:
-		if types.AssignableTo(tcg.vt, tcg.kt) {
+		if types.AssignableTo(ctx.vt, ctx.kt) {
 			tcg.kv(ctx, ctx.keyName, ctx.valueName)
 			return
 		}
 
 		// Assign different type which can be converted
-		if types.ConvertibleTo(tcg.vt, tcg.kt) {
-			tcg.kv(ctx, ctx.keyName, fmt.Sprintf("%s(%s)", tcg.kt.String(), ctx.valueName))
+		if types.ConvertibleTo(ctx.vt, ctx.kt) {
+			tcg.kv(ctx, ctx.keyName, fmt.Sprintf("%s(%s)", ctx.kt.String(), ctx.valueName))
 			return
 		}
 		// NOTE[Dokiy] 2022/9/30: add_err
@@ -103,7 +98,7 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			ctx.structTrailing = structTrailing_ENTER
 		}()
 
-		y, ok := tcg.vt.(*types.Struct)
+		y, ok := ctx.vt.(*types.Struct)
 		if !ok {
 			return
 		}
@@ -127,21 +122,28 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 				continue
 			}
 
-			newCtx := mergeCtx(ctx, xVar.Name(), yVar.Name())
-			newCtx.pValueOnly = true
+			newCtx := (&TypConvContext{
+				kt:             xVar.Type(),
+				keyName:        ctx.keyName,
+				vt:             yVar.Type(),
+				valueName:      ctx.valueName,
+				assignToken:    ctx.assignToken,
+				structTrailing: ctx.structTrailing,
+				pValueOnly:     true,
+			}).mergeName(xVar.Name(), yVar.Name())
 			if tcg.shouldIgnore(newCtx.keyName) {
 				continue
 			}
 
 			// Assign same type field
-			if types.IdenticalIgnoreTags(tcg.kt, tcg.vt) {
+			if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
 				tcg.g.p("%s: %s,\n", newCtx.keyName, newCtx.valueName)
 				// tcg.kv(newCtx, newCtx.keyName, newCtx.valueName)
 				continue
 			}
 
 			// struct keep kv
-			forkedTcg := tcg.forkWithGener(xVar.Type(), yVar.Type(), newGener(""))
+			forkedTcg := tcg.forkWithGener(newGener(""))
 			forkedTcg.Gen(newCtx)
 			tcg.g.p("%s: %s,\n", newCtx.keyName, forkedTcg.g.string())
 			// tcg.kv(ctx, newCtx.keyName, forkedTcg.g.string())
@@ -149,32 +151,29 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 		return
 
 	case *types.Named:
-		// Assign same type field
-		if types.IdenticalIgnoreTags(tcg.kt, tcg.vt) {
-			tcg.kv(ctx, ctx.keyName, ctx.valueName)
-			return
-		}
-
 		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
 		var name = x.Obj().Name()
 		if alias, ok := tcg.pkgAlias[x.Obj().Pkg().Path()]; ok {
 			name = alias + "." + name
 		}
 
-		forkedTcg := tcg.forkWithGener(x.Underlying(), underTpy(tcg.vt), newGener(""))
-		pValueOnly := ctx.pValueOnly
-		ctx.pValueOnly = true
-		forkedTcg.Gen(ctx)
-		ctx.pValueOnly = pValueOnly
+		forkedTcg := tcg.forkWithGener(newGener(""))
+		forkedTcg.Gen(&TypConvContext{
+			kt:             x.Underlying(),
+			keyName:        ctx.keyName,
+			vt:             underTpy(ctx.vt),
+			valueName:      ctx.valueName,
+			assignToken:    ctx.assignToken,
+			structTrailing: ctx.structTrailing,
+			pValueOnly:     true,
+		})
 		tcg.kv(ctx, ctx.keyName, fmt.Sprintf("%s{\n%s}", name, forkedTcg.g.string()))
-		// tcg.structDefine(x, forked
-		// Tcg.g.string())
 
 		return
 
 	case *types.Pointer:
 		// Assign same type field
-		if types.IdenticalIgnoreTags(tcg.kt, tcg.vt) {
+		if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
 			tcg.kv(ctx, ctx.keyName, ctx.valueName)
 			return
 		}
@@ -182,11 +181,16 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 		// TODO[Dokiy] 2023/1/9: to be continued!
 		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
 		// NOTE[Dokiy] 2023/1/4: **A unsupported
-		forkedTcg := tcg.fork(x.Elem(), underTpy(tcg.vt))
-		pValueOnly := ctx.pValueOnly
-		ctx.pValueOnly = true
-		forkedTcg.Gen(ctx)
-		ctx.pValueOnly = pValueOnly
+		forkedTcg := tcg.fork()
+		forkedTcg.Gen(&TypConvContext{
+			kt:             x.Elem(),
+			keyName:        ctx.keyName,
+			vt:             ctx.vt,
+			valueName:      ctx.valueName,
+			assignToken:    ctx.assignToken,
+			structTrailing: ctx.structTrailing,
+			pValueOnly:     true,
+		})
 		tcg.kv(ctx, ctx.keyName, "&"+forkedTcg.g.string())
 		return
 
@@ -199,7 +203,7 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 		return
 
 	case *types.Map:
-		if types.IdenticalIgnoreTags(tcg.kt, tcg.vt) {
+		if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
 			tcg.kv(ctx, ctx.keyName, ctx.valueName)
 			return
 		}

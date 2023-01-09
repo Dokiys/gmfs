@@ -55,10 +55,8 @@ func TestGenTpyConv(t *testing.T) {
 					g:        newGener(""),
 					pkgAlias: parseImportAlias(pkg.Syntax[i]),
 					ignore:   nil,
-					kt:       x.Type(),
-					vt:       y.Type(),
 				}
-				tcg.Gen(NewTypCtx(x.Name(), y.Name()))
+				tcg.Gen(NewTypCtx(x.Name(), y.Name(), x.Type(), y.Type()))
 
 				got, err := format.Source([]byte(tcg.g.string()))
 				if err != nil {

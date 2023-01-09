@@ -13,6 +13,7 @@ import (
 
 var emptyIgnoreMap = make(ignoreMap)
 
+type pkgAliasMap map[string]string
 type ignoreMap map[string]struct{}
 
 func (i ignoreMap) pickField(stmts []ast.Stmt, xname string) {
@@ -202,15 +203,13 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 	}
 }
 
-func (f *fnConv) convField(resultName, paramName string) []ast.Stmt {
+func (f *fnConv) convField(kName, vName string) []ast.Stmt {
 	tcg := &TypConvGen{
 		g:        newGener(""),
 		pkgAlias: f.impAlias,
 		ignore:   f.Ignore,
-		kt:       f.typeOfResult(),
-		vt:       f.typeOfParam(),
 	}
-	tcg.Gen(NewTypCtx(resultName, paramName))
+	tcg.Gen(NewTypCtx(kName, vName, f.typeOfResult(), f.typeOfParam()))
 	// TODO[Dokiy] 2023/1/5:
 	return []ast.Stmt{&ast.AssignStmt{
 		Lhs:    nil,
