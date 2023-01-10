@@ -154,5 +154,5 @@ type B struct {
 	p37 int
 }
 
-var X A
-var Y B
+var x A
+var y B

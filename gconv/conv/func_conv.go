@@ -205,7 +205,8 @@ func (f *fnConv) resultInitStmt() ast.Stmt {
 
 func (f *fnConv) convField(kName, vName string) []ast.Stmt {
 	tcg := &TypConvGen{
-		g:        newGener(""),
+		pg:       newGener(),
+		g:        newGener(),
 		pkgAlias: f.impAlias,
 		ignore:   f.Ignore,
 	}

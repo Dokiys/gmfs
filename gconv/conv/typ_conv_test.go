@@ -14,7 +14,7 @@ import (
 )
 
 func TestGenTpyConv(t *testing.T) {
-	const X, Y = "X", "Y"
+	const X, Y = "x", "y"
 	const wantFile = "want"
 
 	tests := []struct {
@@ -52,15 +52,16 @@ func TestGenTpyConv(t *testing.T) {
 				}
 
 				tcg := &TypConvGen{
-					g:        newGener(""),
+					pg:       newGener(),
+					g:        newGener(),
 					pkgAlias: parseImportAlias(pkg.Syntax[i]),
 					ignore:   nil,
 				}
 				tcg.Gen(NewTypCtx(x.Name(), y.Name(), x.Type(), y.Type()))
 
-				got, err := format.Source([]byte(tcg.g.string()))
+				got, err := format.Source([]byte(tcg.Print()))
 				if err != nil {
-					t.Logf("got:\n %s\n", tcg.g.string())
+					t.Logf("got:\n %s\n", tcg.Print())
 					t.Fatalf("%s: format genSrc err: %s", wantFile, err)
 				}
 

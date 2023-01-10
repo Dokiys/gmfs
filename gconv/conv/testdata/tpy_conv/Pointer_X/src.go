@@ -8,5 +8,5 @@ type B struct {
 	P1 bool
 }
 
-var X *A
-var Y B
+var x *A
+var y B

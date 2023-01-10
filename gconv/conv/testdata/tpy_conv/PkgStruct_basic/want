@@ -1,25 +1,26 @@
-X := A{
+
+x := A{
 	P1: &data2.Data{
-		Data: Y.P1.Data,
+		Data: y.P1.Data,
 	},
-	P2: Y.P2,
+	P2: y.P2,
 	P3: data2.Data{
-		Data: Y.P3.Data,
+		Data: y.P3.Data,
 	},
 	P4: Aa{
 		PP1: data2.Data{
-			Data: Y.P4.PP1.Data,
+			Data: y.P4.PP1.Data,
 		},
 		PP2: &data2.Data{
-			Data: Y.P4.PP2.Data,
+			Data: y.P4.PP2.Data,
 		},
 	},
 	P5: &Aa{
 		PP1: data2.Data{
-			Data: Y.P5.PP1.Data,
+			Data: y.P5.PP1.Data,
 		},
 		PP2: &data2.Data{
-			Data: Y.P5.PP2.Data,
+			Data: y.P5.PP2.Data,
 		},
 	},
 }

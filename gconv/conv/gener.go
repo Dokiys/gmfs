@@ -7,22 +7,17 @@ import (
 
 type gener struct {
 	buf bytes.Buffer
-	// TODO[Dokiy] 2023/1/6: delete
-	prefix string
 }
 
-const prefix_4Tab = "\t"
-
-func newGener(prefix string) *gener {
+func newGener() *gener {
 	var buf bytes.Buffer
 	return &gener{
-		buf:    buf,
-		prefix: prefix,
+		buf: buf,
 	}
 }
 
 func (g *gener) p(format string, args ...interface{}) {
-	fmt.Fprintf(&g.buf, g.prefix+format, args...)
+	fmt.Fprintf(&g.buf, format, args...)
 }
 
 func (g *gener) string() string {

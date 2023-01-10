@@ -30,5 +30,5 @@ type B struct {
 	P5 Bb
 }
 
-var X A
-var Y B
+var x A
+var y B

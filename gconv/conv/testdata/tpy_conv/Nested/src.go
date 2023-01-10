@@ -39,17 +39,6 @@ type A struct {
 	PC4 *Common
 	P1  Aa
 	P2  *Aa
-	P3  bool
-	P4  float32
-	P5  float64
-	P6  complex64
-	P7  complex128
-	P8  string
-	P9  int
-	P10 uint
-	P11 uintptr
-	P12 byte
-	P13 rune
 }
 
 type B struct {
@@ -59,18 +48,7 @@ type B struct {
 	PC4 Common
 	P1  *Bb
 	P2  Bb
-	P3  bool
-	P4  float32
-	P5  float64
-	P6  complex64
-	P7  complex128
-	P8  string
-	P9  int
-	P10 uint
-	P11 uintptr
-	P12 byte
-	P13 rune
 }
 
-var X A
-var Y B
+var x A
+var y B

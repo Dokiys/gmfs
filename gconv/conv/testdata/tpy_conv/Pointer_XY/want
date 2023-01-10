@@ -1,3 +1,8 @@
-X := &A{
-	P1: Y.P1,
+var xy *A
+if y != nil {
+	xy = A{
+		P1: y.P1,
+	}
 }
+
+x := xy

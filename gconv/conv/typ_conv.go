@@ -3,9 +3,11 @@ package conv
 import (
 	"fmt"
 	"go/types"
+	"strings"
 )
 
 const (
+	assignToken_Assign   = " ="
 	assignToken_DEFINE   = " :="
 	assignToken_COLON    = ":"
 	structTrailing_ENTER = "\n"
@@ -50,19 +52,17 @@ func (ctx *TypConvContext) mergeName(keyName, valueName string) *TypConvContext 
 }
 
 type TypConvGen struct {
-	g *gener
+	pg *gener
+	g  *gener
 
 	pkgAlias pkgAliasMap
 	ignore   ignoreMap
 }
 
 func (tcg *TypConvGen) fork() *TypConvGen {
-	return tcg.forkWithGener(newGener(""))
-}
-
-func (tcg *TypConvGen) forkWithGener(g *gener) *TypConvGen {
 	return &TypConvGen{
-		g:        g,
+		pg:       newGener(),
+		g:        newGener(),
 		pkgAlias: tcg.pkgAlias,
 		ignore:   tcg.ignore,
 	}
@@ -72,17 +72,42 @@ func (tcg *TypConvGen) shouldIgnore(name string) bool {
 	return tcg.ignore.exist(name)
 }
 
+func (tcg *TypConvGen) Print() string {
+	return tcg.pgPrint() + "\n" + tcg.gPrint()
+}
+
+func (tcg *TypConvGen) pgPrint() string {
+	return tcg.pg.string()
+}
+
+func (tcg *TypConvGen) gPrint() string {
+	return tcg.g.string()
+}
+
+func (tcg *TypConvGen) aliaName(typ types.Type) string {
+	x, ok := typ.(*types.Named)
+	if !ok {
+		return strings.TrimLeft(typ.String(), ".")
+	}
+
+	var name = x.Obj().Name()
+	if alias, ok := tcg.pkgAlias[x.Obj().Pkg().Path()]; ok {
+		name = alias + "." + name
+	}
+	return name
+}
+
 func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 	switch x := ctx.kt.(type) {
 	case *types.Basic:
 		if types.AssignableTo(ctx.vt, ctx.kt) {
-			tcg.kv(ctx, ctx.keyName, ctx.valueName)
+			kv(tcg.g, ctx, ctx.keyName, ctx.valueName)
 			return
 		}
 
 		// Assign different type which can be converted
 		if types.ConvertibleTo(ctx.vt, ctx.kt) {
-			tcg.kv(ctx, ctx.keyName, fmt.Sprintf("%s(%s)", ctx.kt.String(), ctx.valueName))
+			kv(tcg.g, ctx, ctx.keyName, fmt.Sprintf("%s(%s)", ctx.kt.String(), ctx.valueName))
 			return
 		}
 		// NOTE[Dokiy] 2022/9/30: add_err
@@ -138,26 +163,43 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			// Assign same type field
 			if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
 				tcg.g.p("%s: %s,\n", newCtx.keyName, newCtx.valueName)
-				// tcg.kv(newCtx, newCtx.keyName, newCtx.valueName)
 				continue
 			}
 
-			// struct keep kv
-			forkedTcg := tcg.forkWithGener(newGener(""))
+			forkedTcg := tcg.fork()
 			forkedTcg.Gen(newCtx)
 			tcg.g.p("%s: %s,\n", newCtx.keyName, forkedTcg.g.string())
-			// tcg.kv(ctx, newCtx.keyName, forkedTcg.g.string())
+			tcg.pg.p(forkedTcg.pg.string())
 		}
 		return
 
 	case *types.Named:
-		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
-		var name = x.Obj().Name()
-		if alias, ok := tcg.pkgAlias[x.Obj().Pkg().Path()]; ok {
-			name = alias + "." + name
+		// If vt is Pointer, check value is not nil.
+		if _, ok := ctx.vt.(*types.Pointer); ok {
+			// Prepare assign
+			// TODO[Dokiy] 2023/1/9: to be continued!
+			name := ctx.keyName + tcg.aliaName(x)
+			kv(tcg.g, ctx, ctx.keyName, name)
+
+			forkedTcg := tcg.fork()
+			forkedTcg.Gen(&TypConvContext{
+				kt:             x,
+				keyName:        name,
+				vt:             underTpy(ctx.vt),
+				valueName:      ctx.valueName,
+				assignToken:    assignToken_Assign,
+				structTrailing: structTrailing_ENTER,
+				pValueOnly:     false,
+			})
+			tcg.pg.p("var %s %s\n", name, tcg.aliaName(x))
+			tcg.pg.p("if %s != nil {\n", ctx.valueName)
+			tcg.pg.p(forkedTcg.g.string())
+			tcg.pg.p("}\n")
+			tcg.pg.p(forkedTcg.pg.string())
+			return
 		}
 
-		forkedTcg := tcg.forkWithGener(newGener(""))
+		forkedTcg := tcg.fork()
 		forkedTcg.Gen(&TypConvContext{
 			kt:             x.Underlying(),
 			keyName:        ctx.keyName,
@@ -167,19 +209,42 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			structTrailing: ctx.structTrailing,
 			pValueOnly:     true,
 		})
-		tcg.kv(ctx, ctx.keyName, fmt.Sprintf("%s{\n%s}", name, forkedTcg.g.string()))
+		kv(tcg.g, ctx, ctx.keyName, fmt.Sprintf("%s{\n%s}", tcg.aliaName(x), forkedTcg.g.string()))
+		tcg.pg.p(forkedTcg.pg.string())
 
 		return
 
 	case *types.Pointer:
 		// Assign same type field
 		if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
-			tcg.kv(ctx, ctx.keyName, ctx.valueName)
+			kv(tcg.g, ctx, ctx.keyName, ctx.valueName)
 			return
 		}
 
-		// TODO[Dokiy] 2023/1/9: to be continued!
-		// TODO[Dokiy] 2023/1/6: if vt is pointer, must consider nil
+		// If vt is Pointer, check value is not nil.
+		if _, ok := ctx.vt.(*types.Pointer); ok {
+			// Prepare assign
+			name := ctx.keyName + ctx.valueName
+			kv(tcg.g, ctx, ctx.keyName, name)
+
+			forkedTcg := tcg.fork()
+			forkedTcg.Gen(&TypConvContext{
+				kt:             x.Elem(),
+				keyName:        name,
+				vt:             underTpy(ctx.vt),
+				valueName:      ctx.valueName,
+				assignToken:    assignToken_Assign,
+				structTrailing: structTrailing_ENTER,
+				pValueOnly:     false,
+			})
+			tcg.pg.p(forkedTcg.pg.string())
+			tcg.pg.p("var %s *%s\n", name, tcg.aliaName(x.Elem()))
+			tcg.pg.p("if %s != nil {\n", ctx.valueName)
+			tcg.pg.p(forkedTcg.g.string())
+			tcg.pg.p("}\n")
+			return
+		}
+
 		// NOTE[Dokiy] 2023/1/4: **A unsupported
 		forkedTcg := tcg.fork()
 		forkedTcg.Gen(&TypConvContext{
@@ -191,35 +256,40 @@ func (tcg *TypConvGen) Gen(ctx *TypConvContext) {
 			structTrailing: ctx.structTrailing,
 			pValueOnly:     true,
 		})
-		tcg.kv(ctx, ctx.keyName, "&"+forkedTcg.g.string())
+		kv(tcg.g, ctx, ctx.keyName, "&"+forkedTcg.g.string())
 		return
 
 	case *types.Slice, *types.Array:
 		// TODO[Dokiy] 2022/9/30:
-		// for i = 0; i < len(params); i++ {
-		//	result[i].id = params[i].id
-		// }
-		//
+		if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
+			kv(tcg.g, ctx, ctx.keyName, ctx.valueName)
+			return
+		}
 		return
 
 	case *types.Map:
 		if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
-			tcg.kv(ctx, ctx.keyName, ctx.valueName)
+			kv(tcg.g, ctx, ctx.keyName, ctx.valueName)
 			return
 		}
 		return
 
 	default:
+		if types.IdenticalIgnoreTags(ctx.kt, ctx.vt) {
+			kv(tcg.g, ctx, ctx.keyName, ctx.valueName)
+			return
+		}
+		return
 	}
 	// NOTE[Dokiy] 2022/9/29: add_err
 	panic("Unsupported type")
 }
 
-func (tcg *TypConvGen) kv(ctx *TypConvContext, key string, value string) {
+func kv(g *gener, ctx *TypConvContext, key string, value string) {
 	if ctx.pValueOnly {
-		tcg.g.p("%s", value)
+		g.p("%s", value)
 	} else {
-		tcg.g.p("%s%s %s%s", key, ctx.assignToken, value, ctx.structTrailing)
+		g.p("%s%s %s%s", key, ctx.assignToken, value, ctx.structTrailing)
 	}
 	return
 }
