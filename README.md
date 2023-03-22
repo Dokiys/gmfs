@@ -9,5 +9,5 @@ Some tools help us to generate codes.
 Install any cmd such as:
 
 ```bash
-go install github.com/google/wire/cmd/gsmf@latest
+go install github.com/Dokiys/codemates/cmd/gmfs@latest
 ```

@@ -5,7 +5,7 @@ Generate protobuf message from go struct.
 ## Installing
 
 ```bash
-go install github.com/google/wire/cmd/gsmf@latest
+go install github.com/Dokiys/codemates/cmd/gmfs@latest
 ```
 
 ## Usage
