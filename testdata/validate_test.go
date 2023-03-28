@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Dokiys/codemates/gmfs"
+	"github.com/Dokiys/gmfs"
 )
 
 func TestValidate2(t *testing.T) {
@@ -86,7 +86,7 @@ func genValidate(n ast.Node, rule string) (v string) {
 				if len(rule) <= 0 {
 					rule = "gte = 1"
 				}
-				v = fmt.Sprintf("[(validate.rules).%s.%s]", gmfs.TypInt, rule)
+				v = fmt.Sprintf("[(validate.rules).%s.%s]", gmfs.IntType, rule)
 
 			case types.Typ[types.Int32].Name(), types.Typ[types.Int64].Name():
 				if len(rule) <= 0 {

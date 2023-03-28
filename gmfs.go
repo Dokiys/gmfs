@@ -14,7 +14,7 @@ const specTab = "\t"
 const specEnter = "\n"
 const commentPrefix = "//"
 
-var TypInt = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
+var IntType = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
 
 func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 	src, err := io.ReadAll(r)
@@ -161,7 +161,7 @@ func getSelectorExprName(expr *ast.SelectorExpr) (name string) {
 func getIdentName(ident *ast.Ident) (name string) {
 	switch ident.Name {
 	case "int":
-		name = TypInt
+		name = IntType
 	case "float64":
 		name = "double"
 	case "float32":

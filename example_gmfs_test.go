@@ -5,7 +5,7 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/Dokiys/codemates/gmfs"
+	"github.com/Dokiys/gmfs"
 )
 
 func ExampleGenMsg() {
@@ -13,7 +13,7 @@ func ExampleGenMsg() {
 package example
 
 import (
-	"fmt"
+	"strings"
 	"time"
 )
 
@@ -40,11 +40,8 @@ type TemplateData struct {
 	Map1  map[string]*Item
 
 	// Unsupported
-	StrArr [][]string
-	MapArr map[string][]Item
-	aaa    func() bool
-	Condition
-	*a.Condition
+	function func() bool
+	strings.Reader
 }
 `
 	r := bytes.NewReader([]byte(src))
@@ -52,12 +49,12 @@ type TemplateData struct {
 	exp, _ := regexp.Compile(".*")
 	_ = gmfs.GenMsg(r, os.Stdout, *exp)
 	// Output:
-	//// Item Comment 1
-	///*
+	// // Item Comment 1
+	// /*
 	//	Item Comment 1
-	//*/
-	//// Item Comment 1
-	//message Item {
+	// */
+	// // Item Comment 1
+	// message Item {
 	//	// Item ItemId Comment 1
 	//	int64 item_id = 1;
 	//
@@ -66,9 +63,9 @@ type TemplateData struct {
 	//	Duration duration = 3;
 	//
 	//	google.protobuf.Timestamp created_at = 4;
-	//}
+	// }
 	//
-	//message TemplateData {
+	// message TemplateData {
 	//
 	//	repeated string arr = 1;
 	//
@@ -76,14 +73,8 @@ type TemplateData struct {
 	//
 	//	map<string,Item> map1 = 3;
 	// 	// Unsupported
-	//	// Unsupported field: StrArr
+	//	// Unsupported field: function
 	//
-	//	// Unsupported field: MapArr
-	//
-	//	// Unsupported field: aaa
-	//
-	//	// Unsupported field: Condition
-	//
-	//	// Unsupported field: *a.Condition
-	//}
+	//	// Unsupported field: strings.Reader
+	// }
 }
