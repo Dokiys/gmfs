@@ -1,3 +1,3 @@
-module github.com/Dokiys/codemates
+module github.com/Dokiys/gmfs
 
-go 1.19
+go 1.20

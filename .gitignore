@@ -17,5 +17,5 @@
 # vendor/
 
 *local_test.go
-
+**/cover.out
 .DS_Store

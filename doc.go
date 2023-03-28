@@ -1,4 +1,5 @@
 /*
-Package codemates provides cmds to help us generate code.
+Package gmfs provides a method to convert specified struct
+from reader and write to given writer.
 */
-package codemates
+package gmfs
