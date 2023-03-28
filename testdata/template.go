@@ -3,6 +3,7 @@
 package testdata
 
 import (
+	"strings"
 	"time"
 )
 
@@ -29,9 +30,6 @@ type TemplateData struct {
 	Map1  map[string]*Item
 
 	// Unsupported
-	StrArr [][]string
-	MapArr map[string][]Item
-	aaa    func() bool
-	Condition
-	*a.Condition
+	function func() bool
+	strings.Reader
 }
