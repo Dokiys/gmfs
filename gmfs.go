@@ -37,7 +37,7 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 		if !ok {
 			continue
 		}
-		declCmt = fmt.Sprintf("%s", genComment(cmap[d], specEnter))
+		declCmt = genComment(cmap[d], specEnter)
 		for _, spec := range d.Specs {
 			switch spec.(type) {
 			case *ast.TypeSpec:

@@ -46,8 +46,6 @@ func main() {
 			errExit(err)
 		}
 	}
-
-	return
 }
 
 func usage() {
