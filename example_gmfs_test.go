@@ -62,7 +62,7 @@ type TemplateData struct {
 	//
 	//	Duration duration = 3;
 	//
-	//	google.protobuf.Timestamp created_at = 4;
+	//	google.protobuf.Timestamp created_at  = 4;
 	// }
 	//
 	// message TemplateData {
