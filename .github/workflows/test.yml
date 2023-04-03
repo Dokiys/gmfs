@@ -1,4 +1,4 @@
-name: golangci-lint
+name: Test
 on:
   push:
     tags:
@@ -38,5 +38,5 @@ jobs:
 
           # Optional: show only new issues if it's a pull request. The default value is `false`.
           # only-new-issues: true
-#      - name: test
-#        run: go test -v ./...
+      - name: test
+        run: go test -v ./...
