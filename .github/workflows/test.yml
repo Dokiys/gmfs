@@ -12,10 +12,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
+
       - name: go test
         uses: actions/setup-go@v4
         with:
@@ -23,7 +25,6 @@ jobs:
           cache: false
       - run: go test -v --coverprofile=cover.out ./...
 
-      # test
       - name: codecov
         uses: codecov/codecov-action@v3
         with:
