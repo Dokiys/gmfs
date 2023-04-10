@@ -7,4 +7,5 @@ func TestRegisterValidateFunc(t *testing.T) {
 	if validate != nil {
 		t.Fatal("validate should be nil")
 	}
+	RegisterValidateFunc(defValidateFunc)
 }
