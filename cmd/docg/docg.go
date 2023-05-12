@@ -14,6 +14,7 @@ import (
 const VERSION = "v0.1.0"
 
 var r string
+var prefix string
 var intType int
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 	flag.Usage = usage
 	flag.IntVar(&intType, "i", 64, "Set int convert type, only allow [32,64].")
 	flag.StringVar(&r, "r", ".*", "Regexp match struct name.")
+	flag.StringVar(&prefix, "p", "", "Prefix string add to ech filed.")
 	flag.Parse()
 
 	checkArgs()
@@ -42,7 +44,7 @@ func main() {
 			errExit(err)
 		}
 
-		if err := gmfs.GenMsg(f, os.Stdout, *exp); err != nil {
+		if err := gmfs.GenMsg(f, os.Stdout, *exp, prefix); err != nil {
 			errExit(err)
 		}
 	}

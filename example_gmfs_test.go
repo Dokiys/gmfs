@@ -47,7 +47,7 @@ type TemplateData struct {
 	r := bytes.NewReader([]byte(src))
 
 	exp, _ := regexp.Compile(".*")
-	_ = gmfs.GenMsg(r, os.Stdout, *exp)
+	_ = gmfs.GenMsg(r, os.Stdout, *exp, "")
 	// Output:
 	// // Item Comment 1
 	// /*

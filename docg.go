@@ -16,7 +16,7 @@ const commentPrefix = "//"
 
 var IntType = fmt.Sprintf("int%d", 32<<(^uint(0)>>63))
 
-func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
+func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp, prefix string) error {
 	src, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -31,13 +31,11 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 
 	cmap := ast.NewCommentMap(fset, astf, astf.Comments)
 
-	var declCmt string
 	for _, decl := range astf.Decls {
 		d, ok := decl.(*ast.GenDecl)
 		if !ok {
 			continue
 		}
-		declCmt = genComment(cmap[d], specEnter)
 		for _, spec := range d.Specs {
 			switch spec.(type) {
 			case *ast.TypeSpec:
@@ -52,7 +50,7 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 					continue
 				}
 
-				messages = append(messages, declCmt+specEnter+genMsg(cmap, st, name))
+				messages = append(messages, specEnter+genMsg(cmap, st, prefix))
 			}
 		}
 	}
@@ -61,26 +59,22 @@ func GenMsg(r io.Reader, w io.Writer, exp regexp.Regexp) error {
 	return err
 }
 
-func genMsg(cmap ast.CommentMap, st *ast.StructType, name string) string {
-	var msg = fmt.Sprintf("message %s {"+specEnter, name)
-
-	for i, field := range st.Fields.List {
-		msg += fmt.Sprintf("%s"+specEnter, genComment(cmap[field], specTab))
-
-		// unnamed parameters
-		if len(field.Names) <= 0 {
-			msg += specTab + commentPrefix + " Unsupported field: " + getUnsupportedFieldName(field) + specEnter
+func genMsg(cmap ast.CommentMap, st *ast.StructType, prefix string) string {
+	var msg string
+	for _, field := range st.Fields.List {
+		// unnamed parameters Or unexported field
+		if len(field.Names) <= 0 || !field.Names[0].IsExported() {
 			continue
 		}
 
 		// gen field
+		comment := strings.Replace(genComment(cmap[field], ""), "// ", "", 1)
 		if isSupported(field.Type) {
-			msg += fmt.Sprintf(specTab+"%s %s = %d%s;"+specEnter, genFiledTyp(field.Type), snakeName(field.Names[0].Name), i+1, validate(field))
+			msg += fmt.Sprintf("| %s%s | %s | %s |\n", prefix, snakeName(field.Names[0].Name), genFiledTyp(field.Type), comment)
 		} else {
-			msg += specTab + commentPrefix + " Unsupported field: " + field.Names[0].Name + specEnter
+			msg += fmt.Sprintf("| %s%s | %s | %s |\n", prefix, snakeName(field.Names[0].Name), "Object", comment)
 		}
 	}
-	msg += "}"
 
 	return msg
 }
@@ -123,7 +117,7 @@ func genFiledTyp(expr ast.Expr) (name string) {
 			strings.HasPrefix(tpyName, "map<") {
 			return ""
 		}
-		name = "repeated" + " " + genFiledTyp(x.Elt)
+		name = "[]" + genFiledTyp(x.Elt)
 	}
 
 	return name
