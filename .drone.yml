@@ -1,0 +1,14 @@
+kind: pipeline
+type: exec
+name: deployment
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+  - name: deployment
+    commands:
+      - echo 1
+
+branches: feat/gmfs_doc
